@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 
 from fastapi import FastAPI
-from mock_api.schemas import (
+from schemas import (
     AddressV1,
     AddressV2,
     ContactInfoV2,
