@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -12,6 +13,7 @@ from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.matcher import match
 from aegis_healer.paths import flatten, get_path, model_key, model_paths
+from aegis_healer.runlog import MAX_MESSAGE, RunRecord, append_run
 from aegis_healer.store import MappingStore, default_store, merge
 from aegis_healer.types import (
     DriftReport,
@@ -155,7 +157,42 @@ class Healer:
         model: type[BaseModel],
         records_path: str | None = None,
     ) -> HealResult:
+        result, count = self._validate(payload, model, records_path)
+        if self.persist:
+            self._log_run(model, result, count)
+        return result
+
+    def _log_run(self, model: type[BaseModel], result: HealResult, count: int) -> None:
+        root = getattr(self.store, "root", None)
+        if root is None:
+            return
+        record = RunRecord(
+            model_key=model_key(model),
+            status=result.status,
+            records=count,
+            healed_or_valid=len(result.records),
+            failed_records=result.failed_records,
+            fields_fixed=sorted({m.target for m in result.applied}),
+            pending_id=result.pending_id,
+            usage=result.usage,
+            message=result.message[:MAX_MESSAGE],
+        )
+        try:
+            append_run(root, record)
+        except OSError as exc:  # an audit-log failure must never break validation
+            logging.getLogger("aegis_healer").warning("could not write run log: %s", exc)
+
+    def _validate(
+        self,
+        payload: dict[str, Any] | list[dict[str, Any]],
+        model: type[BaseModel],
+        records_path: str | None,
+    ) -> tuple[HealResult, int]:
         records = self._extract(payload, records_path)
+        result = self._run(records, model)
+        return result, len(records)
+
+    def _run(self, records: list[dict[str, Any]], model: type[BaseModel]) -> HealResult:
         if not records:
             return HealResult(status="ok")
 
