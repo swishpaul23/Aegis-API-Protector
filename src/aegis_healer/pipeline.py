@@ -45,6 +45,7 @@ class Pipeline:
         if result.records:
             self.sink(result.records)
             loaded += len(result.records)
+        sunk = {r.model_dump_json() for r in result.records}
 
         root = getattr(self.healer.store, "root", None)
         remaining = 0
@@ -52,8 +53,11 @@ class Pipeline:
             quarantine = Quarantine(Path(root))
             released = replay(quarantine, self.healer, self.model, remove=False)
             if released.released:
-                self.sink(released.released)  # remove only after the sink accepted them
-                loaded += len(released.released)
+                # Records the fetch re-served were already delivered this run.
+                fresh = [r for r in released.released if r.model_dump_json() not in sunk]
+                if fresh:
+                    self.sink(fresh)  # remove only after the sink accepted them
+                    loaded += len(fresh)
                 remove_batches(quarantine, released.batches_cleared)  # logs a warning per failure
             key = model_key(self.model)
             remaining = sum(len(b.records) for b in quarantine.list(key))

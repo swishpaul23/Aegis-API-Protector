@@ -26,10 +26,11 @@ def sink(records):
     with sqlite3.connect(DB) as db:
         db.execute(
             "CREATE TABLE IF NOT EXISTS profiles "
-            "(user_id TEXT, email_address TEXT, full_name TEXT, payload TEXT)"
+            "(user_id TEXT PRIMARY KEY, email_address TEXT, full_name TEXT, payload TEXT)"
         )
         db.executemany(
-            "INSERT INTO profiles (user_id, email_address, full_name, payload) VALUES (?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO profiles "
+            "(user_id, email_address, full_name, payload) VALUES (?, ?, ?, ?)",
             [(str(r.user_id), r.email_address, r.full_name, r.model_dump_json()) for r in records],
         )
     # sqlite3's context manager commits but does not close the connection

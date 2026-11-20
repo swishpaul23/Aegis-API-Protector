@@ -62,14 +62,25 @@ def test_run_after_approval_releases_quarantine_into_sink(tmp_path):
     store.resolve_pending(first.pending_id, True)
     run = pipe.run()
     assert run.status == "ok"
-    assert run.loaded == 3  # 2 fetched + 1 released (the same V2 is re-served by the fetch)
+    assert run.loaded == 2  # the fetch re-serves V2, so the released copy is not sunk again
     assert Quarantine(store.root).list() == []
     assert run.quarantined == 0
 
 
+def test_reserved_drifted_records_reach_sink_exactly_once(tmp_path):
+    store, _, pipe, sunk = build(tmp_path, [V2, {**V2, "id": "777"}])
+    first = pipe.run()
+    assert first.loaded == 0 and first.quarantined == 2
+    store.resolve_pending(first.pending_id, True)
+    run = pipe.run()
+    assert len(sunk) == 2  # == number of fetched records, no duplicates from the release
+    assert run.loaded == 2 and run.quarantined == 0
+    assert Quarantine(store.root).list() == []
+
+
 def test_release_counts_quarantined_records_from_earlier_run(tmp_path):
     store, healer, _, sunk = build(tmp_path, [V1, V2])
-    healer.validate([V1, V2], User)
+    healer.validate([V1, {**V2, "id": "555"}], User)
     pending = store.list_pending("fixtures.models.User")[0]
     store.resolve_pending(pending.id, True)
     sunk2: list = []

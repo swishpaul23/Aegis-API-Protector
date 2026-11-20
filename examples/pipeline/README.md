@@ -42,3 +42,6 @@ everything from `examples\pipeline` so `.aegis\` and `pipeline.db` land there.
    ```
 
 Point at another API with `$env:AEGIS_URL = "http://localhost:8000/v1.json"`.
+
+Sinks should be idempotent (upsert by key): an API may re-serve records that were already
+loaded or quarantined. This example uses `INSERT OR REPLACE` keyed on `user_id`.
