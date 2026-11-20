@@ -20,9 +20,11 @@ def env(tmp_path, monkeypatch):
     state = {"payload": V1, "patch": None}
     monkeypatch.setattr(check_mod, "fetch_json", lambda url, headers: state["payload"])
 
-    def build(threshold, db, persist=True):
+    def build(threshold, db, persist=True, **kw):
         p = FakeProposer(state["patch"]) if state["patch"] else None
-        return Healer(store=store, proposer=p, auto_apply_threshold=threshold, persist=persist)
+        return Healer(
+            store=store, proposer=p, auto_apply_threshold=threshold, persist=persist, **kw
+        )
 
     monkeypatch.setattr(check_mod, "build_healer", build)
     return store, state
@@ -218,3 +220,21 @@ def test_init_writes_into_new_folder_with_correct_hint(tmp_path, monkeypatch):
     assert r.exit_code == 0, r.output
     assert (tmp_path / "sub" / "m.py").exists()
     assert "--model sub.m:UserProfile" in r.output
+
+
+def test_check_rejects_bad_privacy(env):
+    r = run("check", "http://x", "--model", MODEL, "--privacy", "bogus")
+    assert r.exit_code == 2
+    assert "--privacy" in r.output
+
+
+def test_check_privacy_passed_through(env, monkeypatch):
+    seen = {}
+
+    def build(threshold, db, persist=True, privacy="masked"):
+        seen["privacy"] = privacy
+        return Healer(store=env[0], proposer=None)
+
+    monkeypatch.setattr(check_mod, "build_healer", build)
+    assert run("check", "http://x", "--model", MODEL, "--privacy", "schema").exit_code == 0
+    assert seen["privacy"] == "schema"

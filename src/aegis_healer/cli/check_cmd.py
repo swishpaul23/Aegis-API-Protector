@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 
+from aegis_healer.agent.privacy import Privacy
 from aegis_healer.cli.common import (
     console,
     error_text,
@@ -22,9 +23,19 @@ from aegis_healer.healer import Healer
 EXIT = {"ok": 0, "healed": 0, "pending": 1, "failed": 2}
 
 
-def build_healer(threshold: float, db: str | None, persist: bool = True) -> Healer:
+PRIVACY_MODES = ("full", "masked", "schema")
+
+
+def build_healer(
+    threshold: float, db: str | None, persist: bool = True, privacy: str = "masked"
+) -> Healer:
     """The single place the CLI builds a Healer (tests monkeypatch this)."""
-    return Healer(store=get_store(db), auto_apply_threshold=threshold, persist=persist)
+    return Healer(
+        store=get_store(db),
+        auto_apply_threshold=threshold,
+        persist=persist,
+        privacy=cast(Privacy, privacy),
+    )
 
 
 def check(
@@ -41,8 +52,15 @@ def check(
     ] = None,
     db: Annotated[str | None, typer.Option(help="Store folder (default .aegis)")] = None,
     dry_run: Annotated[bool, typer.Option(help="Heal in memory, save nothing")] = False,
+    privacy: Annotated[
+        str, typer.Option(help="What the agent sees of your data: full | masked | schema")
+    ] = "masked",
 ) -> None:
     """Check an API against your model. Exit 0 ok/healed, 1 pending review, 2 failed."""
+    if privacy not in PRIVACY_MODES:
+        raise typer.BadParameter(
+            f"must be one of: {', '.join(PRIVACY_MODES)}", param_hint="--privacy"
+        )
     target = load_model(model)
     headers = parse_headers(header or [])
     if headers:
@@ -53,7 +71,7 @@ def check(
         console.print(f"[red]Could not fetch {safe(redact_url(url))}:[/red] {safe(exc)}")
         raise typer.Exit(2) from exc
 
-    healer = build_healer(threshold, db, persist=not dry_run)
+    healer = build_healer(threshold, db, persist=not dry_run, privacy=privacy)
     if healer.proposer is None:
         console.print("[dim]Agent disabled (no ANTHROPIC_API_KEY): rules only.[/dim]")
     try:

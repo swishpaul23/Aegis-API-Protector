@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from aegis_healer.agent import AgentError, ProposalRequest, Proposer
+from aegis_healer.agent.privacy import Privacy, prepare_samples
 from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.matcher import match
@@ -80,6 +81,7 @@ class Healer:
         proposer: Proposer | None | Literal["auto"] = "auto",
         sample_size: int = 5,
         persist: bool = True,
+        privacy: Privacy = "masked",
     ) -> None:
         if not 0.0 <= auto_apply_threshold <= 1.0:
             raise ValueError("auto_apply_threshold must be between 0 and 1")
@@ -95,6 +97,7 @@ class Healer:
         self.proposer = proposer
         self.sample_size = sample_size
         self.persist = persist
+        self.privacy = privacy
 
     # ── helpers ─────────────────────────────────────────────
     @staticmethod
@@ -195,7 +198,7 @@ class Healer:
                         p: type(first.get(p)).__name__ for p in report.unexpected if p not in used
                     },
                     already_mapped=[m.target for m in det.resolved],
-                    samples=samples,
+                    samples=prepare_samples(samples, self.privacy),
                 )
 
                 def check(
