@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import secrets
@@ -37,9 +38,10 @@ class ReplayResult(BaseModel):
     released: list[Any] = Field(default_factory=list)
     still_blocked: int = 0
     batches_cleared: list[str] = Field(default_factory=list)
+    remove_failed: list[str] = Field(default_factory=list)
 
 
-def _atomic_write(path: Path, text: str) -> None:
+def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-")
     try:
@@ -68,7 +70,7 @@ class Quarantine:
         if _IGNORE_LINE in existing.splitlines():
             return
         sep = "" if not existing or existing.endswith("\n") else "\n"
-        _atomic_write(path, f"{existing}{sep}{_IGNORE_LINE}\n")
+        atomic_write(path, f"{existing}{sep}{_IGNORE_LINE}\n")
 
     def add(
         self, model_key: str, records: list[dict[str, Any]], reason: str, pending_id: int | None
@@ -84,7 +86,7 @@ class Quarantine:
             records=records,
         )
         self._ensure_gitignore()
-        _atomic_write(
+        atomic_write(
             self.dir / f"{batch_id}.json",
             json.dumps(batch.model_dump(mode="json"), indent=2, default=str) + "\n",
         )
@@ -92,7 +94,10 @@ class Quarantine:
 
     def load(self, batch_id: str) -> QuarantineBatch:
         path = self.dir / f"{_check_id(batch_id)}.json"
-        return QuarantineBatch.model_validate_json(path.read_text(encoding="utf-8"))
+        try:
+            return QuarantineBatch.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):  # never echo the exception: it can hold payload text
+            raise ValueError(f"quarantine batch {batch_id} is unreadable") from None
 
     def remove(self, batch_id: str) -> None:
         (self.dir / f"{_check_id(batch_id)}.json").unlink(missing_ok=True)
@@ -104,10 +109,30 @@ class Quarantine:
         for path in sorted(self.dir.glob("*.json")):
             if not _ID.fullmatch(path.stem):
                 continue
-            batch = self.load(path.stem)
+            try:
+                batch = self.load(path.stem)
+            except ValueError:
+                logging.getLogger("aegis_healer").warning(
+                    "skipping unreadable quarantine file %s", path.name
+                )
+                continue
             if model_key is None or batch.model_key == model_key:
                 out.append(batch)
         return out
+
+
+def remove_batches(quarantine: Quarantine, batch_ids: list[str]) -> list[str]:
+    """Remove batches one by one; returns the ids that could not be removed."""
+    failed = []
+    for batch_id in batch_ids:
+        try:
+            quarantine.remove(batch_id)
+        except OSError:
+            logging.getLogger("aegis_healer").warning(
+                "could not remove quarantine batch %s", batch_id
+            )
+            failed.append(batch_id)
+    return failed
 
 
 def replay(
@@ -115,6 +140,7 @@ def replay(
     healer: Healer,
     model: type[BaseModel],
     batch_id: str | None = None,
+    remove: bool = True,
 ) -> ReplayResult:
     """Re-check quarantined records against the current active mappings only.
 
@@ -135,7 +161,8 @@ def replay(
         if failing:
             result.still_blocked += len(failing)
             continue
-        quarantine.remove(batch.id)
         result.released += valid
         result.batches_cleared.append(batch.id)
+    if remove:  # remove only after every result is collected
+        result.remove_failed = remove_batches(quarantine, result.batches_cleared)
     return result

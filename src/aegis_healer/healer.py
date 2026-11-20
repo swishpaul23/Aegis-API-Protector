@@ -180,8 +180,13 @@ class Healer:
             result.quarantine_id = Quarantine(root).add(
                 model_key(model), failing, result.status, result.pending_id
             )
-        except OSError as exc:  # keep the pipeline flowing; the records are in the caller's hands
-            logging.getLogger("aegis_healer").warning("could not quarantine records: %s", exc)
+        except (
+            OSError,
+            ValueError,
+        ) as exc:  # keep the pipeline flowing; the records are in the caller's hands
+            logging.getLogger("aegis_healer").warning(
+                "could not quarantine records: %s", type(exc).__name__
+            )
 
     def _log_run(self, model: type[BaseModel], result: HealResult, count: int) -> None:
         root = getattr(self.store, "root", None)

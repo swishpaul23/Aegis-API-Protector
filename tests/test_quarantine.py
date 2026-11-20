@@ -153,8 +153,10 @@ def test_cli_replay_exit_codes(tmp_path):
     assert f"Run 'aegis replay --model {SPEC}' to release quarantined records." in r.output
     r = runner.invoke(app, ["replay", "--model", SPEC, "--db", db])
     assert r.exit_code == 0, r.output
-    assert "Released 1" in r.output
+    assert "Would release 1" in r.output
+    assert "Nothing removed" in r.output
     assert "V5A" not in r.output
+    assert len(Quarantine(store.root).list()) == 1
 
 
 def test_cli_review_no_hint_without_quarantine(tmp_path):
@@ -169,3 +171,94 @@ def test_cli_interactive_approve_prints_hint(tmp_path):
     r = runner.invoke(app, ["review", "--db", str(store.root)], input="a\n")
     assert r.exit_code == 0, r.output
     assert "aegis replay --model" in r.output
+
+
+def approved(tmp_path):
+    store, _, result = pending_setup(tmp_path)
+    store.resolve_pending(result.pending_id, True)
+    return store
+
+
+def test_cli_replay_without_out_is_non_destructive(tmp_path):
+    store = approved(tmp_path)
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--db", str(store.root)])
+    assert r.exit_code == 0, r.output
+    assert len(Quarantine(store.root).list()) == 1
+
+
+def test_cli_replay_out_saves_then_removes(tmp_path):
+    store = approved(tmp_path)
+    out = tmp_path / "released.jsonl"
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
+    assert r.exit_code == 0, r.output
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 1 and rows[0]["user_id"] == 1
+    assert Quarantine(store.root).list() == []
+
+
+def test_corrupt_batch_skipped(tmp_path, caplog):
+    store = approved(tmp_path)
+    q = Quarantine(store.root)
+    bad = q.dir / "20260101T000000Z-abcdef.json"
+    bad.write_text('{"id": "SECRETSNIPPET", "records": 5', encoding="utf-8")
+    with caplog.at_level("WARNING", logger="aegis_healer"):
+        assert len(q.list()) == 1
+    assert "20260101T000000Z-abcdef.json" in caplog.text
+    assert "SECRETSNIPPET" not in caplog.text
+    with pytest.raises(ValueError, match="unreadable") as ei:
+        q.load("20260101T000000Z-abcdef")
+    assert "SECRETSNIPPET" not in str(ei.value)
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--db", str(store.root)])
+    assert r.exit_code == 0, r.output
+    assert "SECRETSNIPPET" not in r.output
+    assert len(replay(q, Healer(store=store, proposer=None), User).released) == 1
+
+
+def test_remove_failure_keeps_batch_and_records(tmp_path, monkeypatch):
+    store = approved(tmp_path)
+    q = Quarantine(store.root)
+
+    def boom(self, batch_id):
+        raise PermissionError("nope")
+
+    monkeypatch.setattr(Quarantine, "remove", boom)
+    out = replay(q, Healer(store=store, proposer=None), User)
+    assert len(out.released) == 1
+    assert len(out.remove_failed) == 1
+    monkeypatch.undo()
+    assert len(q.list()) == 1
+
+
+def test_remove_false_keeps_batches(tmp_path):
+    store = approved(tmp_path)
+    q = Quarantine(store.root)
+    out = replay(q, Healer(store=store, proposer=None), User, remove=False)
+    assert len(out.released) == 1 and len(out.batches_cleared) == 1
+    assert len(q.list()) == 1
+
+
+@pytest.mark.parametrize("bad", ["../etc/passwd", "20260101T000000Z-aaaaaa"])
+def test_cli_replay_unknown_batch(tmp_path, bad):
+    store = approved(tmp_path)
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--batch", bad, "--db", str(store.root)])
+    assert r.exit_code == 1
+    assert f"No quarantine batch {bad} for {SPEC}." in r.output
+    assert "Traceback" not in r.output
+
+
+def test_cli_replay_batch_of_other_model(tmp_path):
+    store = approved(tmp_path)
+    bid = Quarantine(store.root).add("other.Model", [{"x": 1}], "failed", None)
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--batch", bid, "--db", str(store.root)])
+    assert r.exit_code == 1
+    assert "No quarantine batch" in r.output
+
+
+def test_healer_quarantine_valueerror_swallowed(tmp_path, monkeypatch):
+    def boom(self, *a, **k):
+        raise ValueError("x")
+
+    monkeypatch.setattr(Quarantine, "add", boom)
+    store = FileStore(tmp_path / ".aegis")
+    r = Healer(store=store, proposer=None).validate([V2], User)
+    assert r.status == "failed" and r.quarantine_id is None
