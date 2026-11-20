@@ -15,7 +15,7 @@ _n = itertools.count()
 def _load(src, tmp_path):
     name = f"gen_{next(_n)}"
     path = tmp_path / f"{name}.py"
-    path.write_text(src)
+    path.write_text(src, encoding="utf-8")
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod

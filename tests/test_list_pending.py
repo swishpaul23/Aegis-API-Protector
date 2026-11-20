@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -82,8 +83,9 @@ def test_workflow_run_blocks_parse_with_bash(tmp_path):
     import shutil
     import subprocess
 
-    if not shutil.which("bash"):
-        pytest.skip("bash not available")
+    if sys.platform == "win32" or not shutil.which("bash"):
+        # On Windows "bash" is often WSL, which can't read Windows temp paths.
+        pytest.skip("bash syntax check runs on Linux/macOS (CI's ubuntu jobs cover it)")
     for name, step in _workflow().items():
         if "run" in step:
             script = tmp_path / "step.sh"
