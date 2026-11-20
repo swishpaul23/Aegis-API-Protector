@@ -9,7 +9,7 @@ from typing import Any, Protocol, TypedDict
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 
-from aegis_healer.agent import AgentError, ProposalRequest
+from aegis_healer.agent import AgentError, BudgetExceeded, ProposalRequest, Usage
 from aegis_healer.agent.prompts import SYSTEM_PROMPT, render_request
 from aegis_healer.types import MappingPatch, PatchCheck
 
@@ -60,22 +60,42 @@ class AgentProposer:
                 max_tokens=2048,
                 timeout=60,
             )
-            structured_llm = llm.with_structured_output(MappingPatch)
+            structured_llm = llm.with_structured_output(MappingPatch, include_raw=True)
         self.llm = structured_llm
         self.max_attempts = max_attempts
+        self.last_usage = Usage()
 
     def propose(
-        self, request: ProposalRequest, check: Callable[[MappingPatch], PatchCheck]
+        self,
+        request: ProposalRequest,
+        check: Callable[[MappingPatch], PatchCheck],
+        budget: int | None = None,
     ) -> MappingPatch:
+        self.last_usage = Usage()
+
         def propose_node(state: _State) -> dict[str, Any]:
             messages = [
                 SystemMessage(SYSTEM_PROMPT),
                 HumanMessage(render_request(request, state["errors"] or None)),
             ]
             attempts = state["attempts"] + 1
+            if budget is not None and self.last_usage.calls >= budget:
+                raise BudgetExceeded(["LLM call budget exhausted"])
+            self.last_usage.calls += 1
             try:
-                raw = self.llm.invoke(messages)
-                patch = raw if isinstance(raw, MappingPatch) else MappingPatch.model_validate(raw)
+                result = self.llm.invoke(messages)
+                if isinstance(result, dict) and "parsed" in result:  # include_raw output
+                    usage = getattr(result.get("raw"), "usage_metadata", None) or {}
+                    self.last_usage.input_tokens += usage.get("input_tokens") or 0
+                    self.last_usage.output_tokens += usage.get("output_tokens") or 0
+                    if result.get("parsing_error") is not None:
+                        raise result["parsing_error"]
+                    result = result["parsed"]
+                patch = (
+                    result
+                    if isinstance(result, MappingPatch)
+                    else MappingPatch.model_validate(result)
+                )
             except Exception as exc:  # malformed output or API error: retry with the error
                 return {"patch": None, "attempts": attempts, "errors": [_short(exc)], "ok": False}
             patch = MappingPatch(

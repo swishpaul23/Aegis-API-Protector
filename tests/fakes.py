@@ -1,3 +1,4 @@
+from aegis_healer.agent import BudgetExceeded, Usage
 from aegis_healer.types import FieldMapping, MappingPatch
 
 
@@ -7,9 +8,14 @@ class FakeProposer:
     def __init__(self, patch: MappingPatch):
         self.patch = patch
         self.requests = []
+        self.last_usage = Usage()
 
-    def propose(self, request, check):
+    def propose(self, request, check, budget=None):
+        self.last_usage = Usage()
+        if budget is not None and budget < 1:
+            raise BudgetExceeded(["LLM call budget exhausted"])
         self.requests.append(request)
+        self.last_usage = Usage(calls=1, input_tokens=1000, output_tokens=200)
         check(self.patch)
         return MappingPatch(
             mappings=[m.model_copy(update={"origin": "agent"}) for m in self.patch.mappings],

@@ -1,0 +1,156 @@
+# Copy to .github/workflows/aegis-drift.yml. See README.md in this folder for setup.
+name: Aegis drift check
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: aegis-drift
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # Set the repository variable AEGIS_PAUSED=true to stop proposing fixes.
+    if: vars.AEGIS_PAUSED != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Pin actions to full commit SHAs for supply-chain safety (major tags shown for readability).
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Skip while an Aegis PR is open
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Any open aegis/* PR (auto-applied or review) means .aegis on main is behind.
+          open_prs=$(gh pr list --state open --limit 200 --json headRefName --jq '[.[] | select(.headRefName | startswith("aegis/"))] | length')
+          if [ "$open_prs" != "0" ]; then
+            echo "::notice::An Aegis PR is still open; skipping this run."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Aegis
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          AEGIS_PIP_SPEC: ${{ vars.AEGIS_PIP_SPEC }}
+        run: |
+          # No default: an unpinned name could resolve to someone else's package in a job with secrets.
+          if [ -z "$AEGIS_PIP_SPEC" ]; then
+            echo "::error::Set the AEGIS_PIP_SPEC repository variable (a git URL pinned to a tag or commit, or aegis-healer==X.Y.Z once published)."
+            exit 1
+          fi
+          pip install "$AEGIS_PIP_SPEC"
+
+      - name: Check for drift
+        id: check
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Prefer a Secret when the URL contains a key; a Variable works for public URLs.
+          AEGIS_URL: ${{ secrets.AEGIS_URL || vars.AEGIS_URL }}
+          AEGIS_MODEL_SPEC: ${{ vars.AEGIS_MODEL_SPEC }}
+        run: |
+          set +e
+          aegis check "$AEGIS_URL" --model "$AEGIS_MODEL_SPEC" --privacy masked --max-llm-calls 10 > aegis-output.txt 2>&1
+          code=$?
+          set -e
+          cat aegis-output.txt
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on unfixable drift
+        if: steps.check.outputs.exit_code == '2'
+        run: |
+          echo "Aegis could not fix the drift (exit 2)."
+          exit 1
+
+      - name: Fail on unexpected exit code
+        if: steps.check.outputs.exit_code != '' && steps.check.outputs.exit_code != '0' && steps.check.outputs.exit_code != '1' && steps.check.outputs.exit_code != '2'
+        env:
+          EXIT_CODE: ${{ steps.check.outputs.exit_code }}
+        run: |
+          echo "aegis check exited with unexpected code $EXIT_CODE."
+          exit 1
+
+      - name: Open PR for auto-applied fix
+        if: steps.check.outputs.exit_code == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: aegis/auto-${{ github.run_id }}
+        run: |
+          # runs.jsonl is deliberately not staged: it changes on every run.
+          git add .aegis/mappings .aegis/history
+          if git diff --cached --quiet; then
+            echo "No changes to .aegis; nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git commit -m "Aegis: auto-applied schema fix"
+          git push origin "$BRANCH"
+          {
+            echo "Aegis detected API drift and applied a fix automatically. Review before merging."
+            echo
+            echo '```'
+            cat aegis-output.txt
+            echo '```'
+          } > pr-body.md
+          gh pr create --title "Aegis: auto-applied schema fix" --body-file pr-body.md --head "$BRANCH"
+
+      - name: Open PRs for fixes that need review
+        if: steps.check.outputs.exit_code == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: aegis/review-${{ github.run_id }}
+        run: |
+          # Keep identical in logic to list_pending.py in this folder.
+          python - > pending-ids.txt <<'PY'
+          import json
+          import pathlib
+
+          for path in sorted(pathlib.Path(".aegis/pending").glob("*.json")):
+              try:
+                  data = json.loads(path.read_text(encoding="utf-8"))
+                  if data.get("status") == "pending":
+                      print(str(data["id"]))
+              except (OSError, ValueError, AttributeError, KeyError):
+                  continue
+          PY
+          if [ ! -s pending-ids.txt ]; then
+            echo "aegis exited 1 without a pending fix (possible crash or usage error)."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          title_ids=""
+          while IFS= read -r id; do
+            aegis review --approve "$id"
+            title_ids="${title_ids:+$title_ids, }#$id"
+          done < pending-ids.txt
+          git add .aegis/pending .aegis/mappings .aegis/history
+          if git diff --cached --quiet; then
+            echo "No changes to .aegis; nothing to do."
+            exit 0
+          fi
+          git commit -m "Aegis: fix needs review ($title_ids)"
+          git push origin "$BRANCH"
+          {
+            echo "Aegis proposed a fix below the auto-apply confidence threshold."
+            echo "Merging approves this fix. Closing it means 'not this fix': the next scheduled run may propose again (set the AEGIS_PAUSED variable to true to stop)."
+            echo
+            echo '```'
+            cat aegis-output.txt
+            echo '```'
+          } > pr-body.md
+          gh pr create --title "Aegis: fix needs review ($title_ids)" --body-file pr-body.md --head "$BRANCH"

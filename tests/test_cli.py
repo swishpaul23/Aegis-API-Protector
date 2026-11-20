@@ -20,9 +20,11 @@ def env(tmp_path, monkeypatch):
     state = {"payload": V1, "patch": None}
     monkeypatch.setattr(check_mod, "fetch_json", lambda url, headers: state["payload"])
 
-    def build(threshold, db, persist=True):
+    def build(threshold, db, persist=True, **kw):
         p = FakeProposer(state["patch"]) if state["patch"] else None
-        return Healer(store=store, proposer=p, auto_apply_threshold=threshold, persist=persist)
+        return Healer(
+            store=store, proposer=p, auto_apply_threshold=threshold, persist=persist, **kw
+        )
 
     monkeypatch.setattr(check_mod, "build_healer", build)
     return store, state
@@ -187,7 +189,10 @@ def test_interactive_review_continues_after_stale_fix(env):
     store, state = env
     state.update(payload=V2, patch=v2_agent_patch(0.8))
     run("check", "http://x", "--model", MODEL)
-    run("check", "http://x", "--model", MODEL)  # second pending fix for the same model
+    first = store.get_pending(1)
+    # An identical re-run is de-duplicated, so add a different fix on the same base version.
+    other = first.patch.model_copy(update={"mappings": first.patch.mappings[:2]})
+    store.add_pending(first.model_key, other, first.report)
     r = run("review", *_db(store), input="a\na\n")
     assert "stale" in r.output
     assert store.get_pending(1).status == "approved"
@@ -218,3 +223,57 @@ def test_init_writes_into_new_folder_with_correct_hint(tmp_path, monkeypatch):
     assert r.exit_code == 0, r.output
     assert (tmp_path / "sub" / "m.py").exists()
     assert "--model sub.m:UserProfile" in r.output
+
+
+def test_check_rejects_bad_privacy(env):
+    r = run("check", "http://x", "--model", MODEL, "--privacy", "bogus")
+    assert r.exit_code == 2
+    assert "--privacy" in r.output
+
+
+def test_check_privacy_passed_through(env, monkeypatch):
+    seen = {}
+
+    def build(threshold, db, persist=True, privacy="masked", **kw):
+        seen["privacy"] = privacy
+        return Healer(store=env[0], proposer=None)
+
+    monkeypatch.setattr(check_mod, "build_healer", build)
+    assert run("check", "http://x", "--model", MODEL, "--privacy", "schema").exit_code == 0
+    assert seen["privacy"] == "schema"
+
+
+def _status_error(url, headers):
+    request = httpx.Request("GET", "http://x/api?api_key=SECRET123")
+    response = httpx.Response(403, request=request)
+    raise httpx.HTTPStatusError(
+        "Client error '403 Forbidden' for url 'http://x/api?api_key=SECRET123'",
+        request=request,
+        response=response,
+    )
+
+
+def test_check_fetch_status_error_hides_query(env, monkeypatch):
+    monkeypatch.setattr(check_mod, "fetch_json", _status_error)
+    r = run("check", "http://x/api?api_key=SECRET123", "--model", MODEL)
+    assert r.exit_code == 2
+    assert "SECRET123" not in r.output and "HTTP 403" in r.output
+
+
+def test_init_fetch_status_error_hides_query(tmp_path, monkeypatch):
+    import aegis_healer.cli.init_cmd as init_mod
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(init_mod, "fetch_json", _status_error)
+    r = run("init", "http://x/api?api_key=SECRET123")
+    assert r.exit_code == 2
+    assert "SECRET123" not in r.output and "HTTP 403" in r.output
+
+
+def test_fetch_other_error_shows_type_only(env, monkeypatch):
+    def boom(url, headers):
+        raise ValueError("bad thing at http://x/api?api_key=SECRET123")
+
+    monkeypatch.setattr(check_mod, "fetch_json", boom)
+    r = run("check", "http://x/api?api_key=SECRET123", "--model", MODEL)
+    assert r.exit_code == 2 and "SECRET123" not in r.output and "ValueError" in r.output

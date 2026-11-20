@@ -152,8 +152,115 @@ def test_agent_failure_is_clean(store):
     from aegis_healer.agent import AgentError
 
     class Broken:
-        def propose(self, request, check):
+        def propose(self, request, check, budget=None):
             raise AgentError(["model returned garbage"])
 
     r = Healer(store=store, proposer=Broken()).validate(V2, User)
     assert r.status == "failed" and "garbage" in r.message
+
+
+# ── pending reuse (final review item 3) ───────────────────────
+def test_open_pending_fix_reused_without_agent_calls(store):
+    seen = []
+    fake = FakeProposer(v2_agent_patch(0.8))
+    h = Healer(store=store, proposer=fake, on_pending=seen.append)
+    results = [h.validate(V2, User) for _ in range(3)]
+    assert [r.status for r in results] == ["pending"] * 3
+    assert len(fake.requests) == 1
+    assert len({r.pending_id for r in results}) == 1
+    assert len(store.list_pending()) == 1
+    assert len(seen) == 1
+    assert results[1].usage.calls == 0
+
+
+def test_pending_not_reused_when_it_does_not_fit(store):
+    first = healer(store, v2_agent_patch(0.8)).validate(V2, User)
+    other = {**V2, "joined": V2["registered"]}
+    del other["registered"]
+    patch = MappingPatch(
+        mappings=[
+            m("id", "user_id", "to_int", 0.8),
+            m("joined", "signup_date", "parse_datetime", 0.8),
+            m("address.zip", "address.postal_code", "none", 0.8),
+        ]
+    )
+    fake = FakeProposer(patch)
+    second = Healer(store=store, proposer=fake).validate(other, User)
+    assert len(fake.requests) == 1
+    assert second.status == "pending" and second.pending_id != first.pending_id
+
+
+def test_stale_pending_not_reused(store):
+    healer(store, v2_agent_patch(0.8)).validate(V2, User)
+    store.save_active("fixtures.models.User", [], "bump version")
+    fake = FakeProposer(v2_agent_patch(0.8))
+    Healer(store=store, proposer=fake).validate(V2, User)
+    assert len(fake.requests) == 1
+
+
+# ── legacy two-argument proposers (M5) ────────────────────────
+class _LegacyProposer:
+    def __init__(self, patch):
+        self.patch, self.calls = patch, 0
+
+    def propose(self, request, check):
+        self.calls += 1
+        check(self.patch)
+        return self.patch
+
+
+def test_two_argument_proposer_still_works(store):
+    legacy = _LegacyProposer(v2_agent_patch(0.95))
+    r = Healer(store=store, proposer=legacy).validate(V2, User)
+    assert r.status == "healed", r.message
+    assert legacy.calls == 1
+
+
+def test_two_argument_proposer_respects_zero_budget(store):
+    legacy = _LegacyProposer(v2_agent_patch(0.95))
+    r = Healer(store=store, proposer=legacy, max_llm_calls=0).validate(V2, User)
+    assert r.status == "failed" and legacy.calls == 0
+
+
+# ── quarantine without a store root (M8) ──────────────────────
+class _RootlessStore:
+    root = None
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def test_warns_once_when_quarantine_has_no_root(store, caplog):
+    rootless = _RootlessStore(store)
+    with caplog.at_level("WARNING", logger="aegis_healer"):
+        h = Healer(store=rootless, proposer=None)
+        h.validate(V2, User)
+        h.validate(V2, User)
+    warnings = [r for r in caplog.records if "quarantine" in r.getMessage()]
+    assert len(warnings) == 1 and warnings[0].name == "aegis_healer"
+    caplog.clear()
+    with caplog.at_level("WARNING", logger="aegis_healer"):
+        Healer(store=rootless, proposer=None, quarantine=False)
+    assert not caplog.records
+
+
+class _StaleUsageProposer:
+    """Reports usage but never resets it: a stale value must not be counted twice."""
+
+    def __init__(self, patch):
+        from aegis_healer.agent import Usage
+
+        self.patch = patch
+        self.last_usage = Usage(calls=5)
+
+    def propose(self, request, check, budget=None):
+        check(self.patch)
+        return self.patch
+
+
+def test_stale_last_usage_not_counted(store):
+    r = Healer(store=store, proposer=_StaleUsageProposer(v2_agent_patch(0.95))).validate(V2, User)
+    assert r.usage.calls == 0

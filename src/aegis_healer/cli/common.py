@@ -43,6 +43,13 @@ def redact_url(url: str) -> str:
     return str(shown) + ("?…" if u.query else "")
 
 
+def fetch_error_text(exc: BaseException) -> str:
+    """A fetch failure without its message: httpx messages embed the full URL (query keys)."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"HTTP {exc.response.status_code}"
+    return type(exc).__name__
+
+
 def error_text(exc: BaseException) -> str:
     if isinstance(exc, KeyError) and exc.args:
         return str(exc.args[0])

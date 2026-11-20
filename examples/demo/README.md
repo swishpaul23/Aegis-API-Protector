@@ -13,6 +13,8 @@ python -m http.server 8000          # terminal 1
 In terminal 2 (same folder, venv active, `ANTHROPIC_API_KEY` in `.env` or the environment).
 Aegis creates its `.aegis\` folder in whatever folder you run it from, here `examples\demo`.
 Without a key, steps 2 to 4 stop at "agent disabled" (rules only).
+By default the agent only sees masked values (`--privacy masked`; use `--privacy schema` to
+send no values) and makes at most 10 LLM calls (`--max-llm-calls N`).
 
 ```powershell
 # 1. Original API: no drift (exit 0)

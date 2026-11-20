@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
@@ -34,6 +35,8 @@ class StalePatchError(Exception):
 
 
 class MappingStore(Protocol):
+    root: Path | None  # optional: where the run log lives; absent means no run log
+
     def get_active(self, model_key: str) -> list[FieldMapping]: ...
     def active_version(self, model_key: str) -> int: ...
     def save_active(self, model_key: str, mappings: list[FieldMapping], reason: str) -> int: ...
