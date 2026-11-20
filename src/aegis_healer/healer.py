@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aegis_healer.agent import AgentError, ProposalRequest, Proposer, Usage
+from aegis_healer.agent import AgentError, BudgetExceeded, ProposalRequest, Proposer, Usage
 from aegis_healer.agent.privacy import Privacy, has_data_like_segment, mask_path, prepare_samples
 from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
@@ -144,6 +144,11 @@ class Healer:
         self.max_llm_calls = max_llm_calls
         self.quarantine = quarantine
         self.on_pending = on_pending
+        if quarantine and persist and getattr(self.store, "root", None) is None:
+            logging.getLogger("aegis_healer").warning(
+                "quarantine is enabled but the store has no root folder: "
+                "blocked records will not be quarantined"
+            )
 
     # ── helpers ─────────────────────────────────────────────
     @staticmethod
@@ -201,6 +206,69 @@ class Healer:
         # Pending files are committed to git: never store data-like keys, whatever the mode.
         safe_report = mask_report(report) if report is not None else report
         return self.store.add_pending(key, proposed, safe_report), True
+
+    def _reusable_pending(
+        self,
+        key: str,
+        current: list[FieldMapping],
+        resolved: list[FieldMapping],
+        unresolved: list[str],
+        raw_samples: list[dict[str, Any]],
+        model: type[BaseModel],
+    ) -> list[FieldMapping] | None:
+        """Mappings of an open, up-to-date pending fix that already heal this group."""
+        try:
+            base_version = self.store.active_version(key)
+            items = self.store.list_pending(key)
+        except (OSError, ValueError):
+            return None
+        wanted = set(unresolved)
+        targets = wanted | {m.target for m in resolved}
+        for item in items:
+            if item.base_version != base_version:
+                continue
+            maps = [m for m in item.patch.mappings if m.target in targets]
+            if not wanted <= {m.target for m in maps}:
+                continue
+            group = merge(_rebase(resolved, current), maps)
+            check = validate_patch(
+                merge(current, group),
+                raw_samples,
+                model,
+                ignore_targets=[u.target for u in item.patch.unmappable],
+                require_sources=group,
+                redact=True,
+            )
+            if check.ok:
+                return group
+        return None
+
+    def _propose(
+        self,
+        request: ProposalRequest,
+        check: Callable[[MappingPatch], PatchCheck],
+        budget: int | None,
+        usage: Usage,
+    ) -> MappingPatch:
+        """Call the proposer, falling back once for old `propose(request, check)` ones."""
+        assert self.proposer is not None
+        legacy = False
+        try:
+            try:
+                return self.proposer.propose(request, check, budget=budget)
+            except TypeError as exc:
+                if "budget" not in str(exc):
+                    raise
+            legacy = True
+            if budget is not None and budget < 1:
+                raise BudgetExceeded(["LLM call budget exhausted"])
+            return self.proposer.propose(request, check)  # type: ignore[call-arg]
+        finally:
+            last = getattr(self.proposer, "last_usage", None)
+            if isinstance(last, Usage):
+                usage.add(last)
+            elif legacy:
+                usage.calls += 1  # no usage reported: count the call against the budget
 
     # ── main entry point ────────────────────────────────────
     def validate(
@@ -337,6 +405,18 @@ class Healer:
             det = match(report, samples, model)
             group_new = list(det.resolved)
 
+            reused = (
+                self._reusable_pending(
+                    key, current, det.resolved, det.unresolved, raw_samples, model
+                )
+                if det.unresolved and self.proposer is not None
+                else None
+            )
+            if reused is not None:
+                # An open pending fix already heals this shape: no agent call, same pending id.
+                new = merge(new, reused)
+                agent_mappings += [m for m in reused if m.origin == "agent"]
+                continue
             if det.unresolved and self.proposer is None:
                 no_agent += det.unresolved
             elif det.unresolved:
@@ -377,9 +457,8 @@ class Healer:
                     None if self.max_llm_calls is None else max(self.max_llm_calls - usage.calls, 0)
                 )
                 try:
-                    patch = self.proposer.propose(request, check, budget=remaining)
+                    patch = self._propose(request, check, remaining, usage)
                 except AgentError as exc:
-                    usage.add(getattr(self.proposer, "last_usage", None) or Usage())
                     return HealResult(
                         usage=usage,
                         status="failed",
@@ -389,7 +468,6 @@ class Healer:
                         proposed=MappingPatch(mappings=new + det.resolved),
                         message=f"Agent could not produce a valid fix: {exc}",
                     )
-                usage.add(getattr(self.proposer, "last_usage", None) or Usage())
                 # Defense in depth: never trust a proposer to have checked its own scope.
                 from aegis_healer.agent.graph import scope_errors
 
