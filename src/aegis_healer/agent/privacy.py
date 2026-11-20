@@ -33,7 +33,7 @@ def _mask_str(s: str) -> str:
     return f"<string, {len(s)} chars>"
 
 
-def _data_like_key(k: Any) -> bool:
+def is_data_like_key(k: Any) -> bool:
     """Keys that look like data rather than field names (emails, ids, free text)."""
     if not isinstance(k, str):
         return True
@@ -45,8 +45,30 @@ def _data_like_key(k: Any) -> bool:
     )
 
 
+_data_like_key = is_data_like_key  # backwards-compatible private name
+
+KEY_PLACEHOLDER = "<key>"
+
+
+def mask_path(path: str) -> str:
+    """Hide data-like segments of a dotted path.
+
+    Everything from the first data-like segment on becomes "<key>": a data key can
+    itself contain dots (e.g. an email), so its trailing parts can't be trusted either.
+    """
+    parts = path.split(".")
+    for i, part in enumerate(parts):
+        if is_data_like_key(part):
+            return ".".join([*parts[:i], KEY_PLACEHOLDER])
+    return path
+
+
+def has_data_like_segment(path: str) -> bool:
+    return any(is_data_like_key(part) for part in path.split("."))
+
+
 def _mask_keys(d: dict) -> list[tuple[Any, Any]]:
-    return [(f"<key {i}>" if _data_like_key(k) else k, v) for i, (k, v) in enumerate(d.items())]
+    return [(f"<key {i}>" if is_data_like_key(k) else k, v) for i, (k, v) in enumerate(d.items())]
 
 
 def mask_value(value: Any) -> Any:

@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from aegis_healer.agent import AgentError, ProposalRequest, Proposer, Usage
-from aegis_healer.agent.privacy import Privacy, prepare_samples
+from aegis_healer.agent.privacy import Privacy, has_data_like_segment, mask_path, prepare_samples
 from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.matcher import match
@@ -24,6 +24,7 @@ from aegis_healer.types import (
     FieldMapping,
     MappingPatch,
     PatchCheck,
+    TypeMismatch,
     Unmappable,
 )
 from aegis_healer.validate import validate_patch
@@ -84,6 +85,21 @@ def _mapping_sig(mappings: list[FieldMapping]) -> frozenset[tuple]:
             m.separator,
         )
         for m in mappings
+    )
+
+
+def mask_report(report: DriftReport) -> DriftReport:
+    """A DriftReport safe to write to .aegis/ (committed) or to show without payload keys."""
+    mismatches, seen = [], set()
+    for t in report.type_mismatches:
+        path = mask_path(t.path)
+        if path not in seen:
+            seen.add(path)
+            mismatches.append(TypeMismatch(path=path, expected=t.expected, received=t.received))
+    return DriftReport(
+        missing=sorted({mask_path(p) for p in report.missing}),
+        unexpected=sorted({mask_path(p) for p in report.unexpected}),
+        type_mismatches=mismatches,
     )
 
 
@@ -182,7 +198,9 @@ class Healer:
         for item in self.store.list_pending(key):
             if item.base_version == base_version and _mapping_sig(item.patch.mappings) == wanted:
                 return item.id, False
-        return self.store.add_pending(key, proposed, report), True
+        # Pending files are committed to git: never store data-like keys, whatever the mode.
+        safe_report = mask_report(report) if report is not None else report
+        return self.store.add_pending(key, proposed, safe_report), True
 
     # ── main entry point ────────────────────────────────────
     def validate(
@@ -192,6 +210,8 @@ class Healer:
         records_path: str | None = None,
     ) -> HealResult:
         result, failing, count = self._validate(payload, model, records_path)
+        if self.privacy != "full" and result.report is not None:
+            result.report = mask_report(result.report)
         if self.persist:
             self._quarantine(model, result, failing)
             self._log_run(model, result, count)
@@ -326,8 +346,12 @@ class Healer:
                     model_name=model.__name__,
                     model_schema=model_paths(model),
                     unresolved=det.unresolved,
+                    # Map-style data keys (emails, ids) can't be field renames: never send them.
                     candidates={
-                        p: type(first.get(p)).__name__ for p in report.unexpected if p not in used
+                        p: type(first.get(p)).__name__
+                        for p in report.unexpected
+                        if p not in used
+                        and (self.privacy == "full" or not has_data_like_segment(p))
                     },
                     already_mapped=[m.target for m in det.resolved],
                     samples=prepare_samples(samples, self.privacy),
@@ -407,7 +431,9 @@ class Healer:
             return base
 
         combined = merge(active, new)
-        check_result = validate_patch(combined, all_samples, model, require_sources=new)
+        check_result = validate_patch(
+            combined, all_samples, model, require_sources=new, redact=self.privacy != "full"
+        )
         if not check_result.ok:
             base.message = "Proposed fix failed validation: " + "; ".join(check_result.errors[:5])
             return base

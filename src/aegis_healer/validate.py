@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from aegis_healer.agent.privacy import KEY_PLACEHOLDER, is_data_like_key
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.paths import has_path, model_paths
 from aegis_healer.types import FieldMapping, MappingPatch, PatchCheck
@@ -14,6 +15,23 @@ from aegis_healer.types import FieldMapping, MappingPatch, PatchCheck
 
 def _covered(loc: str, ignore: Iterable[str]) -> bool:
     return any(loc == t or loc.startswith(f"{t}.") or t.startswith(f"{loc}.") for t in ignore)
+
+
+# Error types whose message is written by user validators and can quote the input value.
+_FREE_TEXT_ERRORS = ("value_error", "assertion_error")
+
+
+def _masked_loc(loc: tuple[Any, ...]) -> str:
+    """Join a Pydantic loc, hiding data-like dict keys (each element is one real key)."""
+    out = []
+    for part in loc:
+        if isinstance(part, int):
+            out.append(str(part))
+        elif is_data_like_key(part):
+            out.append(KEY_PLACEHOLDER)
+        else:
+            out.append(str(part))
+    return ".".join(out)
 
 
 def validate_patch(
@@ -62,6 +80,11 @@ def validate_patch(
                 continue
             for err in exc.errors():
                 loc = ".".join(str(p) for p in err["loc"])
-                if not _covered(loc, ignore):
+                if _covered(loc, ignore):
+                    continue
+                if redact:
+                    msg = err["type"] if err["type"] in _FREE_TEXT_ERRORS else err["msg"]
+                    errors.append(f"sample {i}: {_masked_loc(err['loc'])}: {msg}")
+                else:
                     errors.append(f"sample {i}: {loc}: {err['msg']}")
     return PatchCheck(ok=not errors, errors=errors)

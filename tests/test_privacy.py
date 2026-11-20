@@ -4,6 +4,7 @@ import pytest
 from fakes import FakeProposer, m
 from fixtures.models import InternalUserProfile
 from fixtures.payloads import PHASE1_V2
+from pydantic import BaseModel, field_validator
 
 from aegis_healer import Healer
 from aegis_healer.agent.privacy import mask_value, prepare_samples
@@ -129,3 +130,81 @@ def test_unknown_types_fail_closed():
 
 def test_trailing_newline_not_a_category():
     assert mask_value("alice\n") == "<string, 6 chars>"
+
+
+# ── data-like keys (final review item 2) ──────────────────────
+class Scored(BaseModel):
+    user_id: int
+    scores: dict[str, int]
+
+
+SCORED = {"ref": "7", "scores": {"alice@example.com": 3}}
+
+
+def test_is_data_like_key_and_mask_path():
+    from aegis_healer.agent.privacy import is_data_like_key, mask_path
+
+    assert is_data_like_key("alice@example.com") and not is_data_like_key("user_id")
+    assert mask_path("scores.alice@example.com") == "scores.<key>"
+    assert mask_path("address.zip") == "address.zip"
+    assert mask_path("notes.Alice Smith") == "notes.<key>"
+
+
+def test_data_like_keys_never_reach_llm_or_pending(tmp_store):
+    fake = FakeProposer(MappingPatch(mappings=[m("ref", "user_id", "to_int", 0.5)]))
+    r = Healer(store=tmp_store, proposer=fake).validate(SCORED, Scored)
+    assert r.status == "pending", r.message
+    assert "alice" not in json.dumps(fake.requests[0].model_dump())
+    assert list(fake.requests[0].candidates) == ["ref"]
+    files = list((tmp_store.root / "pending").rglob("*.json"))
+    assert files
+    for f in files:
+        assert "alice" not in f.read_text(encoding="utf-8")
+    assert "alice" not in r.report.model_dump_json()
+
+
+def test_pending_report_masked_even_in_full_mode(tmp_store):
+    fake = FakeProposer(MappingPatch(mappings=[m("ref", "user_id", "to_int", 0.5)]))
+    r = Healer(store=tmp_store, proposer=fake, privacy="full").validate(SCORED, Scored)
+    assert "scores.alice@example.com" in r.report.unexpected  # in-memory report kept in full mode
+    for f in (tmp_store.root / "pending").rglob("*.json"):
+        assert "alice" not in f.read_text(encoding="utf-8")
+
+
+class _Checked(BaseModel):
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def _no_secret(cls, v):
+        if v != "ok":
+            raise ValueError(f"bad code {v}")
+        return v
+
+
+def test_redact_hides_value_error_text_and_data_keys():
+    from aegis_healer.validate import validate_patch
+
+    out = validate_patch([], [{"code": "SECRET-42"}], _Checked, redact=True)
+    assert not out.ok and "SECRET-42" not in json.dumps(out.errors)
+    assert "value_error" in out.errors[0]
+    out = validate_patch([], [{"user_id": 1, "scores": {"alice@x.io": "z"}}], Scored, redact=True)
+    assert not out.ok and "alice" not in json.dumps(out.errors)
+    kept = validate_patch([], [{"code": "SECRET-42"}], _Checked)
+    assert "SECRET-42" in json.dumps(kept.errors)  # unredacted callers keep the detail
+
+
+def test_final_validation_is_redacted(tmp_store, monkeypatch):
+    import aegis_healer.healer as hmod
+
+    calls = []
+    real = hmod.validate_patch
+
+    def spy(*a, **k):
+        calls.append(k.get("redact", False))
+        return real(*a, **k)
+
+    monkeypatch.setattr(hmod, "validate_patch", spy)
+    fake = FakeProposer(MappingPatch(mappings=[m("ref", "user_id", "to_int", 0.5)]))
+    Healer(store=tmp_store, proposer=fake).validate(SCORED, Scored)
+    assert calls and all(calls)
