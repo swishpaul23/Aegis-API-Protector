@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -12,6 +13,7 @@ from aegis_healer.agent.privacy import Privacy, prepare_samples
 from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.matcher import match
+from aegis_healer.notify import PendingNotice
 from aegis_healer.paths import flatten, get_path, model_key, model_paths
 from aegis_healer.quarantine import Quarantine
 from aegis_healer.runlog import RunRecord, append_run, run_message
@@ -89,6 +91,7 @@ class Healer:
         privacy: Privacy = "masked",
         max_llm_calls: int | None = 10,
         quarantine: bool = True,
+        on_pending: Callable[[PendingNotice], None] | None = None,
     ) -> None:
         if max_llm_calls is not None and max_llm_calls < 0:
             raise ValueError("max_llm_calls must be >= 0 or None")
@@ -109,6 +112,7 @@ class Healer:
         self.privacy = privacy
         self.max_llm_calls = max_llm_calls
         self.quarantine = quarantine
+        self.on_pending = on_pending
 
     # ── helpers ─────────────────────────────────────────────
     @staticmethod
@@ -165,7 +169,31 @@ class Healer:
         if self.persist:
             self._quarantine(model, result, failing)
             self._log_run(model, result, count)
+        if result.status == "pending":
+            self._notify(model, result, len(failing) if result.quarantine_id else 0)
         return result
+
+    def _notify(self, model: type[BaseModel], result: HealResult, quarantined: int) -> None:
+        if self.on_pending is None:
+            return
+        mappings = result.proposed.mappings if result.proposed else []
+        agent_conf = [m.confidence for m in mappings if m.origin == "agent"]
+        key = model_key(model)
+        notice = PendingNotice(
+            model_key=key,
+            pending_id=result.pending_id,
+            fields=sorted({m.target for m in mappings}),
+            min_confidence=min(agent_conf) if agent_conf else None,
+            quarantined=quarantined,
+            # Fixed and value-free: result.message can contain payload text.
+            message=f"{len({m.target for m in mappings})} field fix(es) for {key} need review",
+        )
+        try:
+            self.on_pending(notice)
+        except Exception as exc:  # a notifier must never change the heal result
+            logging.getLogger("aegis_healer").warning(
+                "pending notification failed: %s", type(exc).__name__
+            )
 
     def _quarantine(
         self, model: type[BaseModel], result: HealResult, failing: list[dict[str, Any]]

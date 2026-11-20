@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from collections.abc import Callable
 from typing import Annotated, cast, get_args
 
 import typer
@@ -19,6 +21,7 @@ from aegis_healer.cli.common import (
     safe,
 )
 from aegis_healer.healer import Healer
+from aegis_healer.notify import PendingNotice, webhook_notifier
 
 EXIT = {"ok": 0, "healed": 0, "pending": 1, "failed": 2}
 
@@ -32,6 +35,7 @@ def build_healer(
     persist: bool = True,
     privacy: str = "masked",
     max_llm_calls: int | None = 10,
+    on_pending: Callable[[PendingNotice], None] | None = None,
 ) -> Healer:
     """The single place the CLI builds a Healer (tests monkeypatch this)."""
     return Healer(
@@ -40,7 +44,19 @@ def build_healer(
         persist=persist,
         privacy=cast(Privacy, privacy),
         max_llm_calls=max_llm_calls,
+        on_pending=on_pending,
     )
+
+
+def _env_notifier() -> Callable[[PendingNotice], None] | None:
+    url = os.environ.get("AEGIS_WEBHOOK_URL")
+    if not url:
+        return None
+    try:
+        return webhook_notifier(url)
+    except ValueError as exc:  # the message never contains the URL
+        console.print(f"[yellow]AEGIS_WEBHOOK_URL ignored: {safe(exc)}[/yellow]")
+        return None
 
 
 def check(
@@ -80,7 +96,12 @@ def check(
         raise typer.Exit(2) from exc
 
     healer = build_healer(
-        threshold, db, persist=not dry_run, privacy=privacy, max_llm_calls=max_llm_calls
+        threshold,
+        db,
+        persist=not dry_run,
+        privacy=privacy,
+        max_llm_calls=max_llm_calls,
+        on_pending=_env_notifier(),
     )
     if healer.proposer is None:
         console.print("[dim]Agent disabled (no ANTHROPIC_API_KEY): rules only.[/dim]")
