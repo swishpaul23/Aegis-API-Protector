@@ -208,3 +208,34 @@ def test_final_validation_is_redacted(tmp_store, monkeypatch):
     fake = FakeProposer(MappingPatch(mappings=[m("ref", "user_id", "to_int", 0.5)]))
     Healer(store=tmp_store, proposer=fake).validate(SCORED, Scored)
     assert calls and all(calls)
+
+
+# ── identifier-like segments are not data (re-review) ─────────
+class Lined(BaseModel):
+    user_id: int
+    address_line_1: str
+
+
+def test_identifier_segments_with_digits_kept_as_candidates(tmp_store):
+    fake = FakeProposer(MappingPatch(mappings=[m("street_line1", "address_line_1", "none", 0.5)]))
+    r = Healer(store=tmp_store, proposer=fake).validate(
+        {"user_id": 1, "street_line1": "x y"}, Lined
+    )
+    assert "street_line1" in fake.requests[0].candidates
+    assert r.status in ("pending", "healed"), r.message
+    assert r.report.missing == ["address_line_1"]
+    assert r.report.unexpected == ["street_line1"]
+
+
+def test_segment_predicate_and_missing_never_masked():
+    from aegis_healer.agent.privacy import is_data_like_segment, mask_path
+    from aegis_healer.healer import mask_report
+    from aegis_healer.types import DriftReport
+
+    for ok in ("street_line1", "addressLine2", "oauth2_token", "user_id", "com"):
+        assert not is_data_like_segment(ok)
+    for bad in ("alice@example", "Alice Smith", "2026-01-02", "a3f1.b8c2", "123", "x+y"):
+        assert is_data_like_segment(bad)
+    assert mask_path("contact.addressLine2") == "contact.addressLine2"
+    rep = mask_report(DriftReport(missing=["oauth2_token"], unexpected=["m.bob@x.io"]))
+    assert rep.missing == ["oauth2_token"] and rep.unexpected == ["m.<key>"]

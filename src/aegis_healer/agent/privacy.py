@@ -48,6 +48,22 @@ def is_data_like_key(k: Any) -> bool:
 _data_like_key = is_data_like_key  # backwards-compatible private name
 
 KEY_PLACEHOLDER = "<key>"
+_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
+
+
+def is_data_like_segment(seg: Any) -> bool:
+    """Path segments that look like data, not field names (narrower than dict keys).
+
+    Identifier-like names with digits (`street_line1`, `oauth2_token`) are field names.
+    """
+    if not isinstance(seg, str):
+        return True
+    return (
+        "@" in seg
+        or any(c.isspace() for c in seg)
+        or _is_datetime(seg)
+        or not _IDENTIFIER.fullmatch(seg)
+    )
 
 
 def mask_path(path: str) -> str:
@@ -58,13 +74,13 @@ def mask_path(path: str) -> str:
     """
     parts = path.split(".")
     for i, part in enumerate(parts):
-        if is_data_like_key(part):
+        if is_data_like_segment(part):
             return ".".join([*parts[:i], KEY_PLACEHOLDER])
     return path
 
 
 def has_data_like_segment(path: str) -> bool:
-    return any(is_data_like_key(part) for part in path.split("."))
+    return any(is_data_like_segment(part) for part in path.split("."))
 
 
 def _mask_keys(d: dict) -> list[tuple[Any, Any]]:

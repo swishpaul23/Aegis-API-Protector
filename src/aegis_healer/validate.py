@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from aegis_healer.agent.privacy import KEY_PLACEHOLDER, is_data_like_key
+from aegis_healer.agent.privacy import KEY_PLACEHOLDER, is_data_like_segment
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.paths import has_path, model_paths
 from aegis_healer.types import FieldMapping, MappingPatch, PatchCheck
@@ -27,7 +27,7 @@ def _masked_loc(loc: tuple[Any, ...]) -> str:
     for part in loc:
         if isinstance(part, int):
             out.append(str(part))
-        elif is_data_like_key(part):
+        elif is_data_like_segment(part):
             out.append(KEY_PLACEHOLDER)
         else:
             out.append(str(part))

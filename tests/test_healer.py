@@ -245,3 +245,22 @@ def test_warns_once_when_quarantine_has_no_root(store, caplog):
     with caplog.at_level("WARNING", logger="aegis_healer"):
         Healer(store=rootless, proposer=None, quarantine=False)
     assert not caplog.records
+
+
+class _StaleUsageProposer:
+    """Reports usage but never resets it: a stale value must not be counted twice."""
+
+    def __init__(self, patch):
+        from aegis_healer.agent import Usage
+
+        self.patch = patch
+        self.last_usage = Usage(calls=5)
+
+    def propose(self, request, check, budget=None):
+        check(self.patch)
+        return self.patch
+
+
+def test_stale_last_usage_not_counted(store):
+    r = Healer(store=store, proposer=_StaleUsageProposer(v2_agent_patch(0.95))).validate(V2, User)
+    assert r.usage.calls == 0

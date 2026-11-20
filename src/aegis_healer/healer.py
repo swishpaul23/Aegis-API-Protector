@@ -89,7 +89,10 @@ def _mapping_sig(mappings: list[FieldMapping]) -> frozenset[tuple]:
 
 
 def mask_report(report: DriftReport) -> DriftReport:
-    """A DriftReport safe to write to .aegis/ (committed) or to show without payload keys."""
+    """A DriftReport safe to write to .aegis/ (committed) or to show without payload keys.
+
+    `missing` holds model paths (schema, not payload), so it is never masked.
+    """
     mismatches, seen = [], set()
     for t in report.type_mismatches:
         path = mask_path(t.path)
@@ -97,7 +100,7 @@ def mask_report(report: DriftReport) -> DriftReport:
             seen.add(path)
             mismatches.append(TypeMismatch(path=path, expected=t.expected, received=t.received))
     return DriftReport(
-        missing=sorted({mask_path(p) for p in report.missing}),
+        missing=list(report.missing),
         unexpected=sorted({mask_path(p) for p in report.unexpected}),
         type_mismatches=mismatches,
     )
@@ -253,6 +256,11 @@ class Healer:
         """Call the proposer, falling back once for old `propose(request, check)` ones."""
         assert self.proposer is not None
         legacy = False
+        if hasattr(self.proposer, "last_usage"):
+            try:  # reset so a proposer that never updates it can't re-report an old value
+                self.proposer.last_usage = Usage()
+            except AttributeError:
+                pass
         try:
             try:
                 return self.proposer.propose(request, check, budget=budget)
@@ -267,7 +275,7 @@ class Healer:
             last = getattr(self.proposer, "last_usage", None)
             if isinstance(last, Usage):
                 usage.add(last)
-            elif legacy:
+            if legacy and not (isinstance(last, Usage) and last.calls):
                 usage.calls += 1  # no usage reported: count the call against the budget
 
     # ── main entry point ────────────────────────────────────
