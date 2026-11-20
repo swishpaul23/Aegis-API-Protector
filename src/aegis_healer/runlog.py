@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from aegis_healer.agent import Usage
+from aegis_healer.agent.privacy import Privacy
 
 RUNS_FILE = "runs.jsonl"
 MAX_MESSAGE = 300
@@ -48,3 +49,31 @@ def read_runs(root: Path, limit: int = 20) -> list[RunRecord]:
             except (ValueError, ValidationError):
                 continue
     return runs[-limit:][::-1]
+
+
+_FAILED_CODES = (
+    ("Unresolved drift in", "agent_disabled"),
+    ("Agent proposed changes outside", "out_of_scope"),
+    ("Cannot heal without changing your model", "unmappable"),
+    ("Proposed fix failed validation", "failed_validation"),
+)
+
+
+def run_message(status: str, message: str, privacy: Privacy) -> str:
+    """What the committed run log may say about a run.
+
+    Result messages can embed payload values (validator text, LLM-written reasons), so
+    unless privacy is "full" only a fixed category code is stored.
+    """
+    if privacy == "full":
+        return message[:MAX_MESSAGE]
+    if status == "pending":
+        return "pending_review"
+    if status != "failed":
+        return ""
+    if message.startswith("Agent could not produce a valid fix"):
+        return "budget_exhausted" if "budget" in message.lower() else "agent_error"
+    for prefix, code in _FAILED_CODES:
+        if message.startswith(prefix):
+            return code
+    return "failed"

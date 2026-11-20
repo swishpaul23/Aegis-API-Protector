@@ -13,7 +13,7 @@ from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.matcher import match
 from aegis_healer.paths import flatten, get_path, model_key, model_paths
-from aegis_healer.runlog import MAX_MESSAGE, RunRecord, append_run
+from aegis_healer.runlog import RunRecord, append_run, run_message
 from aegis_healer.store import MappingStore, default_store, merge
 from aegis_healer.types import (
     DriftReport,
@@ -175,7 +175,7 @@ class Healer:
             fields_fixed=sorted({m.target for m in result.applied}),
             pending_id=result.pending_id,
             usage=result.usage,
-            message=result.message[:MAX_MESSAGE],
+            message=run_message(result.status, result.message, self.privacy),
         )
         try:
             append_run(root, record)

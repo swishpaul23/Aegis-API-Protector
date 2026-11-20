@@ -1,10 +1,12 @@
+import logging
 import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from fakes import FakeProposer, v2_agent_patch
+from fakes import FakeProposer, m, v2_agent_patch
 from fixtures.models import User
 from fixtures.payloads import V1, V2
+from pydantic import BaseModel, field_validator
 from typer.testing import CliRunner
 
 from aegis_healer import Healer
@@ -12,6 +14,7 @@ from aegis_healer.agent import Usage
 from aegis_healer.cli import app
 from aegis_healer.runlog import RunRecord, append_run, read_runs
 from aegis_healer.store.files import FileStore
+from aegis_healer.types import MappingPatch
 
 runner = CliRunner(env={"COLUMNS": "200"})
 
@@ -77,12 +80,14 @@ def test_no_payload_values_in_log(tmp_path):
     assert "a@x.io" not in text
 
 
-def test_log_failure_does_not_break_validate(tmp_path):
+def test_log_failure_does_not_break_validate(tmp_path, caplog):
     root = tmp_path / ".aegis"
     store = FileStore(root)
     root.mkdir(parents=True, exist_ok=True)
     (root / "runs.jsonl").mkdir()  # appending to a directory raises OSError
-    assert Healer(store=store, proposer=None).validate(V1, User).status == "ok"
+    with caplog.at_level(logging.WARNING, logger="aegis_healer"):
+        assert Healer(store=store, proposer=None).validate(V1, User).status == "ok"
+    assert "could not write run log" in caplog.text
 
 
 def test_cli_runs_table(tmp_path):
@@ -105,3 +110,64 @@ def test_cli_runs_limit(tmp_path, limit):
         append_run(tmp_path, rec(i, model_key=f"k{i}"))
     r = runner.invoke(app, ["runs", "--db", str(tmp_path), "--limit", str(limit)])
     assert "k2" in r.output and "k0" not in r.output
+
+
+class Strict(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def _check(cls, v: str) -> str:
+        raise ValueError(f"bad email {v}")
+
+
+def _run_strict(tmp_path, **kw):
+    store = FileStore(tmp_path / ".aegis")
+    r = Healer(
+        store=store, proposer=FakeProposer(MappingPatch(mappings=[m("who", "email")])), **kw
+    ).validate({"who": "secret@x.io"}, Strict)
+    return r, (store.root / "runs.jsonl").read_text(encoding="utf-8"), read_runs(store.root)[0]
+
+
+def test_failed_message_is_categorical_by_default(tmp_path):
+    r, text, run = _run_strict(tmp_path)
+    assert r.status == "failed"
+    assert "secret@x.io" not in text
+    assert run.message == "failed_validation"
+
+
+def test_full_privacy_keeps_message_text(tmp_path):
+    r, text, run = _run_strict(tmp_path, privacy="full")
+    assert run.message == r.message[:300] and "secret@x.io" in run.message
+
+
+@pytest.mark.parametrize(
+    ("status", "message", "code"),
+    [
+        ("ok", "", ""),
+        ("pending", "Fix needs review (x).", "pending_review"),
+        ("failed", "Unresolved drift in a and agent disabled", "agent_disabled"),
+        (
+            "failed",
+            "Agent could not produce a valid fix: LLM call budget exhausted",
+            "budget_exhausted",
+        ),
+        ("failed", "Agent could not produce a valid fix: nope", "agent_error"),
+        ("failed", "Agent proposed changes outside the drifted fields: x", "out_of_scope"),
+        ("failed", "Cannot heal without changing your model. x", "unmappable"),
+        ("failed", "something new", "failed"),
+    ],
+)
+def test_run_message_codes(status, message, code):
+    from aegis_healer.runlog import run_message
+
+    assert run_message(status, message, "masked") == code
+
+
+def test_run_message_drops_values_unless_full():
+    from aegis_healer.runlog import run_message
+
+    msg = "Proposed fix failed validation: email: bad email secret@x.io"
+    assert run_message("failed", msg, "masked") == "failed_validation"
+    assert run_message("failed", msg, "schema") == "failed_validation"
+    assert run_message("failed", msg, "full") == msg
