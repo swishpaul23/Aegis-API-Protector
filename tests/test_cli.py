@@ -231,7 +231,7 @@ def test_check_rejects_bad_privacy(env):
 def test_check_privacy_passed_through(env, monkeypatch):
     seen = {}
 
-    def build(threshold, db, persist=True, privacy="masked"):
+    def build(threshold, db, persist=True, privacy="masked", **kw):
         seen["privacy"] = privacy
         return Healer(store=env[0], proposer=None)
 

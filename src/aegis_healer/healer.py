@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aegis_healer.agent import AgentError, ProposalRequest, Proposer
+from aegis_healer.agent import AgentError, ProposalRequest, Proposer, Usage
 from aegis_healer.agent.privacy import Privacy, prepare_samples
 from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
@@ -43,6 +43,7 @@ class HealResult(BaseModel):
     pending_id: int | None = None
     report: DriftReport | None = None
     message: str = ""
+    usage: Usage = Field(default_factory=Usage)
 
     def raise_for_status(self) -> HealResult:
         if self.status not in ("ok", "healed"):
@@ -82,7 +83,10 @@ class Healer:
         sample_size: int = 5,
         persist: bool = True,
         privacy: Privacy = "masked",
+        max_llm_calls: int | None = 10,
     ) -> None:
+        if max_llm_calls is not None and max_llm_calls < 0:
+            raise ValueError("max_llm_calls must be >= 0 or None")
         if not 0.0 <= auto_apply_threshold <= 1.0:
             raise ValueError("auto_apply_threshold must be between 0 and 1")
         if proposer == "auto":
@@ -98,6 +102,7 @@ class Healer:
         self.sample_size = sample_size
         self.persist = persist
         self.privacy = privacy
+        self.max_llm_calls = max_llm_calls
 
     # ── helpers ─────────────────────────────────────────────
     @staticmethod
@@ -172,6 +177,7 @@ class Healer:
         no_agent: list[str] = []
         all_samples: list[dict[str, Any]] = []
         first_report: DriftReport | None = None
+        usage = Usage()
 
         for raws in sorted(groups.values(), key=len, reverse=True):
             raw_samples = raws[: self.sample_size]
@@ -217,10 +223,15 @@ class Healer:
                         redact=self.privacy != "full",
                     )
 
+                remaining = (
+                    None if self.max_llm_calls is None else max(self.max_llm_calls - usage.calls, 0)
+                )
                 try:
-                    patch = self.proposer.propose(request, check)
+                    patch = self.proposer.propose(request, check, budget=remaining)
                 except AgentError as exc:
+                    usage.add(getattr(self.proposer, "last_usage", None) or Usage())
                     return HealResult(
+                        usage=usage,
                         status="failed",
                         records=valid,
                         failed_records=len(failing),
@@ -228,12 +239,14 @@ class Healer:
                         proposed=MappingPatch(mappings=new + det.resolved),
                         message=f"Agent could not produce a valid fix: {exc}",
                     )
+                usage.add(getattr(self.proposer, "last_usage", None) or Usage())
                 # Defense in depth: never trust a proposer to have checked its own scope.
                 from aegis_healer.agent.graph import scope_errors
 
                 bad = scope_errors(request, patch)
                 if bad:
                     return HealResult(
+                        usage=usage,
                         status="failed",
                         records=valid,
                         failed_records=len(failing),
@@ -254,6 +267,7 @@ class Healer:
             failed_records=len(failing),
             report=first_report,
             proposed=proposed,
+            usage=usage,
         )
         if no_agent:
             base.message = (
@@ -285,6 +299,7 @@ class Healer:
                 applied=new,
                 report=first_report,
                 proposed=proposed,
+                usage=usage,
             )
 
         # Pending fixes don't store payload samples: .aegis/ is meant to be committed.

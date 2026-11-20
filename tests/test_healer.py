@@ -152,7 +152,7 @@ def test_agent_failure_is_clean(store):
     from aegis_healer.agent import AgentError
 
     class Broken:
-        def propose(self, request, check):
+        def propose(self, request, check, budget=None):
             raise AgentError(["model returned garbage"])
 
     r = Healer(store=store, proposer=Broken()).validate(V2, User)

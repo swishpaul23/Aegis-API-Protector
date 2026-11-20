@@ -94,7 +94,7 @@ class _Probe:
     def __init__(self, patch):
         self.patch, self.checks = patch, []
 
-    def propose(self, request, check):
+    def propose(self, request, check, budget=None):
         self.checks.append(check(self.patch))
         return self.patch
 

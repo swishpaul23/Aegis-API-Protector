@@ -27,7 +27,11 @@ PRIVACY_MODES = get_args(Privacy)
 
 
 def build_healer(
-    threshold: float, db: str | None, persist: bool = True, privacy: str = "masked"
+    threshold: float,
+    db: str | None,
+    persist: bool = True,
+    privacy: str = "masked",
+    max_llm_calls: int | None = 10,
 ) -> Healer:
     """The single place the CLI builds a Healer (tests monkeypatch this)."""
     return Healer(
@@ -35,6 +39,7 @@ def build_healer(
         auto_apply_threshold=threshold,
         persist=persist,
         privacy=cast(Privacy, privacy),
+        max_llm_calls=max_llm_calls,
     )
 
 
@@ -55,6 +60,9 @@ def check(
     privacy: Annotated[
         str, typer.Option(help="What the agent sees of your data: full | masked | schema")
     ] = "masked",
+    max_llm_calls: Annotated[
+        int, typer.Option(min=0, help="Max LLM calls for this run (0 = rules only)")
+    ] = 10,
 ) -> None:
     """Check an API against your model. Exit 0 ok/healed, 1 pending review, 2 failed."""
     if privacy not in PRIVACY_MODES:
@@ -71,7 +79,9 @@ def check(
         console.print(f"[red]Could not fetch {safe(redact_url(url))}:[/red] {safe(exc)}")
         raise typer.Exit(2) from exc
 
-    healer = build_healer(threshold, db, persist=not dry_run, privacy=privacy)
+    healer = build_healer(
+        threshold, db, persist=not dry_run, privacy=privacy, max_llm_calls=max_llm_calls
+    )
     if healer.proposer is None:
         console.print("[dim]Agent disabled (no ANTHROPIC_API_KEY): rules only.[/dim]")
     try:
@@ -104,4 +114,10 @@ def check(
             console.print(f"[yellow]Pending: {safe(result.message)}{where}[/yellow]")
         else:
             console.print(f"[red]✗ {safe(result.message)}[/red]")
+    u = result.usage
+    if u.calls > 0:
+        console.print(
+            f"[dim]LLM: {u.calls} call(s), {u.input_tokens} in / {u.output_tokens} out tokens, "
+            f"~${u.est_cost_usd:.4f}[/dim]"
+        )
     raise typer.Exit(EXIT[result.status])
