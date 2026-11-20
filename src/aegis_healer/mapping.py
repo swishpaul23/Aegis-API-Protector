@@ -104,15 +104,19 @@ def map_value(record: dict[str, Any], mapping: FieldMapping) -> Any:
 
 
 def apply_mappings(record: dict[str, Any], mappings: list[FieldMapping]) -> dict[str, Any]:
-    """Return a new record with mappings applied. Missing sources are skipped."""
+    """Return a new record with mappings applied. Missing sources are skipped.
+
+    Order-independent: every value is read from the original record, all sources are
+    removed, then all targets are written. Parents are never pruned, so a required
+    (but now empty) parent object survives.
+    """
     src = copy.deepcopy(record)
     out = copy.deepcopy(record)
-    for m in mappings:
-        if not all(has_path(src, s) for s in m.sources):
-            continue
-        value = map_value(src, m)
+    values = [(m, map_value(src, m)) for m in mappings if all(has_path(src, s) for s in m.sources)]
+    for m, _ in values:
         for s in m.sources:
-            if s != m.target and has_path(out, s):
-                pop_path(out, s)
+            if has_path(out, s):
+                pop_path(out, s, prune=False)
+    for m, value in values:
         set_path(out, m.target, value)
     return out

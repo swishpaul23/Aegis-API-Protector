@@ -15,8 +15,9 @@ def flatten(record: dict[str, Any], prefix: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in record.items():
         path = f"{prefix}{key}"
-        if isinstance(value, dict) and value:
-            out.update(flatten(value, f"{path}."))
+        if isinstance(value, dict):
+            if value:
+                out.update(flatten(value, f"{path}."))
         else:
             out[path] = value
     return out
@@ -51,8 +52,8 @@ def set_path(record: dict[str, Any], path: str, value: Any) -> None:
     node[parts[-1]] = value
 
 
-def pop_path(record: dict[str, Any], path: str) -> Any:
-    """Remove and return the value at path; prune parents left empty."""
+def pop_path(record: dict[str, Any], path: str, prune: bool = True) -> Any:
+    """Remove and return the value at path; optionally prune parents left empty."""
     parts = path.split(".")
     chain: list[dict[str, Any]] = [record]
     node: Any = record
@@ -64,6 +65,8 @@ def pop_path(record: dict[str, Any], path: str) -> Any:
     if parts[-1] not in node:
         raise KeyError(path)
     value = node.pop(parts[-1])
+    if not prune:
+        return value
     for parent, part in zip(reversed(chain[:-1]), reversed(parts[:-1]), strict=True):
         if parent[part] == {}:
             del parent[part]
@@ -104,3 +107,12 @@ def model_paths(model: type[BaseModel], prefix: str = "") -> dict[str, str]:
 
 def model_key(model: type[BaseModel]) -> str:
     return f"{model.__module__}.{model.__qualname__}"
+
+
+def norm(s: str) -> str:
+    """Compare names ignoring case, underscores and dashes."""
+    return s.lower().replace("_", "").replace("-", "")
+
+
+def leaf(path: str) -> str:
+    return path.rsplit(".", 1)[-1]

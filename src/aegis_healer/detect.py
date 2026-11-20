@@ -6,12 +6,31 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from aegis_healer.paths import flatten, get_path, model_paths
+from aegis_healer.paths import flatten, get_path, model_paths, norm
 from aegis_healer.types import DriftReport, TypeMismatch
 
 
 def _loc(err: dict[str, Any]) -> str:
     return ".".join(str(p) for p in err["loc"])
+
+
+def _unexpected(present: dict[str, Any], expected: dict[str, str]) -> list[str]:
+    return sorted(
+        p for p in present if p not in expected and not any(e.startswith(f"{p}.") for e in expected)
+    )
+
+
+def soft_missing(record: dict[str, Any], model: type[BaseModel]) -> list[str]:
+    """Optional/defaulted fields that are absent while a same-named key showed up.
+
+    These validate fine (the default fills in), so without this check a renamed
+    optional field would silently lose its data. Only exact normalized-path matches
+    count, so this never guesses.
+    """
+    expected = model_paths(model)
+    present = flatten(record)
+    unexpected = {norm(u) for u in _unexpected(present, expected)}
+    return [p for p in expected if p not in present and norm(p) in unexpected]
 
 
 def detect_drift(record: dict[str, Any], model: type[BaseModel]) -> DriftReport:
@@ -44,11 +63,9 @@ def detect_drift(record: dict[str, Any], model: type[BaseModel]) -> DriftReport:
                 TypeMismatch(path=path, expected=expected.get(path, "?"), received=received)
             )
 
-    unexpected = [
-        p for p in present if p not in expected and not any(e.startswith(f"{p}.") for e in expected)
-    ]
+    missing.extend(soft_missing(record, model))
     return DriftReport(
         missing=sorted(set(missing)),
-        unexpected=sorted(unexpected),
+        unexpected=_unexpected(present, expected),
         type_mismatches=mismatches,
     )

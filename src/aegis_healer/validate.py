@@ -21,21 +21,26 @@ def validate_patch(
     samples: list[dict[str, Any]],
     model: type[BaseModel],
     ignore_targets: Iterable[str] = (),
+    require_sources: list[FieldMapping] | None = None,
 ) -> PatchCheck:
     """Check structure, then that every sample validates once the patch is applied.
 
     `ignore_targets`: fields whose validation errors are expected (declared unmappable).
+    `require_sources`: mappings whose sources must exist in the samples (default: all).
+    Saved mappings for a source the API no longer sends are harmless (they're skipped),
+    so callers pass only the new mappings here.
     """
     mappings = patch.mappings if isinstance(patch, MappingPatch) else patch
     ignore = list(ignore_targets)
     targets = model_paths(model)
     errors: list[str] = []
 
-    seen: set[str] = set()
-    for m in mappings:
+    for m in mappings if require_sources is None else require_sources:
         for s in m.sources:
             if not any(has_path(sample, s) for sample in samples):
                 errors.append(f"source '{s}' is not in the payload")
+    seen: set[str] = set()
+    for m in mappings:
         if m.target not in targets:
             errors.append(f"target '{m.target}' is not a field of {model.__name__}")
         if m.target in seen:

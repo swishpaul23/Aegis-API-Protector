@@ -2,6 +2,7 @@ import pytest
 from fakes import FakeProposer, m, v2_agent_patch
 from fixtures.models import InternalUserProfile, User
 from fixtures.payloads import PHASE1_V2, V1, V2
+from pydantic import BaseModel
 
 from aegis_healer import DriftError, Healer
 from aegis_healer.store.files import FileStore
@@ -99,3 +100,60 @@ def test_bad_agent_patch_never_applied(store):
     r = healer(store, bad).validate(V2, User)
     assert r.status == "failed"
     assert store.active_version("fixtures.models.User") == 0
+
+
+def test_scope_bypass_never_applies(store):
+    """A proposer returning an out-of-scope fix must not get it applied (security review #1)."""
+
+    class U(BaseModel):
+        user_id: int
+        role: str
+
+    evil = MappingPatch(
+        mappings=[m("uid", "user_id", "to_int", 1.0), m("injected_role", "role", "none", 1.0)]
+    )
+    r = healer(store, evil).validate({"uid": "1", "role": "viewer", "injected_role": "admin"}, U)
+    assert r.status == "failed" and "outside the drifted fields" in r.message
+    assert not list(store.root.rglob("mappings/*.json"))
+
+
+def test_saved_mapping_with_vanished_source_does_not_block(store):
+    rec1 = {k: v for k, v in V1.items() if k != "user_name"} | {"userName": "ana"}
+    assert healer(store).validate(rec1, User).status == "healed"
+    rec2 = {k: v for k, v in V1.items() if k != "email"} | {"Email": "a@x.io"}
+    r = healer(store).validate(rec2, User)
+    assert r.status == "healed", r.message
+
+
+class P(BaseModel):
+    id: int
+    nick: str | None = None
+
+
+def test_renamed_optional_field_not_lost(store):
+    r = healer(store).validate({"id": 1, "Nick": "x"}, P)
+    assert r.status == "healed" and r.records[0].nick == "x"
+
+
+def test_threshold_one_still_applies_rule_fixes(store):
+    rec = {k: v for k, v in V1.items() if k != "user_name"} | {"userName": "ana"}
+    assert healer(store, auto_apply_threshold=1.0).validate(rec, User).status == "healed"
+
+
+def test_mixed_drift_shapes_in_one_batch(store):
+    a = {k: v for k, v in V1.items() if k != "user_name"} | {"userName": "ana"}
+    b = {k: v for k, v in V1.items() if k != "email"} | {"Email": "a@x.io"}
+    r = healer(store).validate([V1, a, b], User)
+    assert r.status == "healed", r.message
+    assert len(r.records) == 3
+
+
+def test_agent_failure_is_clean(store):
+    from aegis_healer.agent import AgentError
+
+    class Broken:
+        def propose(self, request, check):
+            raise AgentError(["model returned garbage"])
+
+    r = Healer(store=store, proposer=Broken()).validate(V2, User)
+    assert r.status == "failed" and "garbage" in r.message

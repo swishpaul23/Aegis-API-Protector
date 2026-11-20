@@ -7,16 +7,8 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from aegis_healer.mapping import apply_mappings
-from aegis_healer.paths import has_path
+from aegis_healer.paths import has_path, leaf, norm
 from aegis_healer.types import SIMPLE_TRANSFORMS, DriftReport, FieldMapping, MatchResult
-
-
-def norm(s: str) -> str:
-    return s.lower().replace("_", "").replace("-", "")
-
-
-def _leaf(path: str) -> str:
-    return path.rsplit(".", 1)[-1]
 
 
 def target_ok(record: dict[str, Any], model: type[BaseModel], target: str) -> bool:
@@ -34,14 +26,14 @@ def target_ok(record: dict[str, Any], model: type[BaseModel], target: str) -> bo
 def _working_transform(
     source: str, target: str, samples: list[dict[str, Any]], model: type[BaseModel]
 ) -> FieldMapping | None:
-    """First simple transform that makes `target` valid on every sample."""
+    """First simple transform that makes `target` valid on every sample that has `source`."""
+    relevant = [s for s in samples if has_path(s, source)]
+    if not relevant:
+        return None
     for transform in SIMPLE_TRANSFORMS:
         m = FieldMapping(source=source, target=target, transform=transform)
         try:
-            ok = all(
-                has_path(s, source) and target_ok(apply_mappings(s, [m]), model, target)
-                for s in samples
-            )
+            ok = all(target_ok(apply_mappings(s, [m]), model, target) for s in relevant)
         except (ValueError, KeyError):
             continue
         if ok:
@@ -49,12 +41,19 @@ def _working_transform(
     return None
 
 
+def _candidates(target: str, pool: list[str]) -> tuple[list[str], float, str]:
+    rule_a = [s for s in pool if norm(s) == norm(target)]
+    if rule_a:
+        return rule_a, 1.0, "renamed (same name, different style)"
+    rule_b = [s for s in pool if norm(leaf(s)) == norm(leaf(target))]
+    return rule_b, 0.95, "moved (same name, new location)"
+
+
 def match(
     report: DriftReport, samples: list[dict[str, Any]], model: type[BaseModel]
 ) -> MatchResult:
     resolved: list[FieldMapping] = []
     unresolved: list[str] = []
-    used: set[str] = set()
 
     # Same path, wrong type: try a safe conversion.
     for mm in report.type_mismatches:
@@ -64,22 +63,22 @@ def match(
         else:
             resolved.append(m.model_copy(update={"confidence": 1.0, "reason": "type change"}))
 
-    for target in report.missing:
-        pool = [s for s in report.unexpected if s not in used]
-        rule_a = [s for s in pool if norm(s) == norm(target)]
-        rule_b = [s for s in pool if norm(_leaf(s)) == norm(_leaf(target))]
-        if len(rule_a) == 1:
-            source, confidence, why = rule_a[0], 1.0, "renamed (same name, different style)"
-        elif not rule_a and len(rule_b) == 1:
-            source, confidence, why = rule_b[0], 0.95, "moved (same name, new location)"
-        else:
+    # Find candidates for every missing target first, so a source wanted by two
+    # targets is treated as ambiguous for both instead of going to whichever is first.
+    found = {t: _candidates(t, report.unexpected) for t in report.missing}
+    claims: dict[str, int] = {}
+    for sources, _, _ in found.values():
+        if len(sources) == 1:
+            claims[sources[0]] = claims.get(sources[0], 0) + 1
+
+    for target, (sources, confidence, why) in found.items():
+        if len(sources) != 1 or claims[sources[0]] > 1:
             unresolved.append(target)
             continue
-        m = _working_transform(source, target, samples, model)
+        m = _working_transform(sources[0], target, samples, model)
         if m is None:
             unresolved.append(target)
             continue
-        used.add(source)
         resolved.append(m.model_copy(update={"confidence": confidence, "reason": why}))
 
     return MatchResult(resolved=resolved, unresolved=unresolved)

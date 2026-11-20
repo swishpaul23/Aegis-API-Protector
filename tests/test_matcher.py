@@ -46,3 +46,19 @@ def test_phase1_uuid_not_forced_into_int():
     targets = {m.target for m in r.resolved}
     assert {"email_address", "address.city"} <= targets
     assert "user_id" in r.unresolved
+
+
+class City(BaseModel):
+    city: str
+
+
+class TwoHomes(BaseModel):
+    home: City
+    work: City
+
+
+def test_two_targets_competing_for_one_source_not_guessed():
+    rec = {"loc": {"city": "Van"}}
+    r = _run(rec, TwoHomes)
+    assert r.resolved == []
+    assert set(r.unresolved) == {"home.city", "work.city"}
