@@ -214,6 +214,7 @@ class Healer:
                         model,
                         ignore_targets=[u.target for u in p.unmappable],
                         require_sources=added,
+                        redact=self.privacy != "full",
                     )
 
                 try:

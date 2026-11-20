@@ -28,16 +28,32 @@ def _mask_str(s: str) -> str:
         return "<datetime>"
     if "@" in s and "." in s.split("@", 1)[1]:
         return "<email>"
-    if len(s) <= 20 and _CATEGORY.match(s) and (s == s.lower() or s == s.upper()):
+    if len(s) <= 20 and _CATEGORY.fullmatch(s) and (s == s.lower() or s == s.upper()):
         return s
     return f"<string, {len(s)} chars>"
+
+
+def _data_like_key(k: Any) -> bool:
+    """Keys that look like data rather than field names (emails, ids, free text)."""
+    if not isinstance(k, str):
+        return True
+    return (
+        "@" in k
+        or any(c.isspace() for c in k)
+        or (len(k) > 8 and any(c.isdigit() for c in k))
+        or _is_datetime(k)
+    )
+
+
+def _mask_keys(d: dict) -> list[tuple[Any, Any]]:
+    return [(f"<key {i}>" if _data_like_key(k) else k, v) for i, (k, v) in enumerate(d.items())]
 
 
 def mask_value(value: Any) -> Any:
     """Replace sensitive leaf values with placeholders; keep structure and enum-like values."""
     if isinstance(value, dict):
-        return {k: mask_value(v) for k, v in value.items()}
-    if isinstance(value, list):
+        return {k: mask_value(v) for k, v in _mask_keys(value)}
+    if isinstance(value, (list, tuple, set, frozenset)):
         return [mask_value(v) for v in value]
     if value is None or isinstance(value, bool):
         return value
@@ -47,13 +63,13 @@ def mask_value(value: Any) -> Any:
         return f"<{type(value).__name__}>"
     if isinstance(value, str):
         return _mask_str(value)
-    return value
+    return f"<{type(value).__name__}>"
 
 
 def _schema_value(value: Any) -> Any:
     if isinstance(value, dict):
-        return {k: _schema_value(v) for k, v in value.items()}
-    if isinstance(value, list):
+        return {k: _schema_value(v) for k, v in _mask_keys(value)}
+    if isinstance(value, (list, tuple, set, frozenset)):
         return [_schema_value(v) for v in value]
     return type(value).__name__
 

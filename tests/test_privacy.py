@@ -86,3 +86,46 @@ def test_healer_full_mode_opt_in(tmp_store):
     fake = FakeProposer(PATCH)
     Healer(store=tmp_store, proposer=fake, privacy="full").validate(PHASE1_V2, InternalUserProfile)
     assert "Alice" in json.dumps(fake.requests[0].samples)
+
+
+class _Probe:
+    """Proposer that calls check() with a patch and records the result."""
+
+    def __init__(self, patch):
+        self.patch, self.checks = patch, []
+
+    def propose(self, request, check):
+        self.checks.append(check(self.patch))
+        return self.patch
+
+
+def test_check_errors_do_not_leak_values_by_default(tmp_store):
+    bad = MappingPatch(mappings=[m("first_name", "full_name", "to_int")])
+    probe = _Probe(bad)
+    Healer(store=tmp_store, proposer=probe).validate(PHASE1_V2, InternalUserProfile)
+    errors = probe.checks[0].errors
+    assert errors and "Alice" not in json.dumps(errors)
+
+
+def test_check_errors_keep_values_in_full_mode(tmp_store):
+    bad = MappingPatch(mappings=[m("first_name", "full_name", "to_int")])
+    probe = _Probe(bad)
+    Healer(store=tmp_store, proposer=probe, privacy="full").validate(PHASE1_V2, InternalUserProfile)
+    assert "Alice" in json.dumps(probe.checks[0].errors)
+
+
+def test_masks_data_like_keys_only():
+    out = mask_value({"alice@example.com": 1, "user_id": 2, "2024-01-02 x": 3, "a1b2c3d4e5f6": 4})
+    assert out == {"<key 0>": "<int>", "user_id": "<int>", "<key 2>": "<int>", "<key 3>": "<int>"}
+    assert prepare_samples([{"bob smith": "x"}], "schema") == [{"<key 0>": "str"}]
+
+
+def test_unknown_types_fail_closed():
+    from decimal import Decimal
+
+    assert mask_value((1, "Alice")) == ["<int>", "<string, 5 chars>"]
+    assert mask_value({"d": Decimal("12.5")}) == {"d": "<Decimal>"}
+
+
+def test_trailing_newline_not_a_category():
+    assert mask_value("alice\n") == "<string, 6 chars>"

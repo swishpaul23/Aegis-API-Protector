@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated, cast, get_args
 
 import typer
 
@@ -23,7 +23,7 @@ from aegis_healer.healer import Healer
 EXIT = {"ok": 0, "healed": 0, "pending": 1, "failed": 2}
 
 
-PRIVACY_MODES = ("full", "masked", "schema")
+PRIVACY_MODES = get_args(Privacy)
 
 
 def build_healer(
