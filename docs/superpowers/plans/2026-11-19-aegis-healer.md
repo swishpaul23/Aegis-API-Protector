@@ -126,6 +126,8 @@ Fixtures (used by every later task):
 class Address(BaseModel):
     city: str
     postal_code: str
+
+
 class User(BaseModel):
     user_id: int
     user_name: str
@@ -133,13 +135,22 @@ class User(BaseModel):
     signup_date: datetime
     address: Address
 
+
 # tests/fixtures/payloads.py
-V1 = {"user_id": 1, "user_name": "ana", "email": "a@x.io",
-      "signup_date": "2026-01-02T00:00:00Z",
-      "address": {"city": "Vancouver", "postal_code": "V5A 1S6"}}
-V2 = {"id": "1", "userName": "ana", "contact": {"email": "a@x.io"},
-      "registered": "2026-01-02T00:00:00Z",
-      "address": {"city": "Vancouver", "zip": "V5A 1S6"}}
+V1 = {
+    "user_id": 1,
+    "user_name": "ana",
+    "email": "a@x.io",
+    "signup_date": "2026-01-02T00:00:00Z",
+    "address": {"city": "Vancouver", "postal_code": "V5A 1S6"},
+}
+V2 = {
+    "id": "1",
+    "userName": "ana",
+    "contact": {"email": "a@x.io"},
+    "registered": "2026-01-02T00:00:00Z",
+    "address": {"city": "Vancouver", "zip": "V5A 1S6"},
+}
 ```
 (If Phase 1's mock v1/v2 payloads differ, add them as extra fixtures; keep these.)
 

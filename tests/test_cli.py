@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from fakes import FakeProposer, v2_agent_patch
 from fixtures.payloads import V1, V2
@@ -124,3 +125,96 @@ def test_history_and_rollback(env):
     assert "approved fix #1" in run("history", "fixtures.models.User", *_db(store)).output
     r = run("rollback", "fixtures.models.User", "1", *_db(store))
     assert r.exit_code == 0 and store.active_version("fixtures.models.User") == 2
+
+
+@pytest.mark.parametrize(
+    "payload,extra",
+    [
+        ("just a string", []),
+        (None, []),
+        ([1, 2], []),
+        ({"data": {"x": 1}}, ["--records-path", "nope"]),
+    ],
+)
+def test_bad_payloads_exit2_without_traceback(env, payload, extra):
+    env[1].update(payload=payload)
+    r = run("check", "http://x", "--model", MODEL, *extra)
+    assert r.exit_code == 2, r.output
+    assert "Traceback" not in r.output and "Could not read records" in r.output
+
+
+def test_untrusted_text_is_escaped(env):
+    from rich.console import Console
+
+    from aegis_healer.cli.common import mapping_table, safe
+
+    assert safe("[green]ok[/green]\x1b[8m") == "\\[green]ok\\[/green]?[8m"
+    out = Console(record=True, width=200)
+    out.print(mapping_table([m_("a", "b", reason="[link=https://evil]click[/link] \x1b]8;;x")]))
+    text = out.export_text()
+    assert "[link=https://evil]" in text and "\x1b" not in text
+
+
+def m_(src, tgt, **kw):
+    from aegis_healer.types import FieldMapping
+
+    return FieldMapping(source=src, target=tgt, **kw)
+
+
+def test_redirect_drops_headers_cross_origin_and_refuses_downgrade():
+    seen = []
+
+    def handler(request):
+        seen.append((request.url.host, request.headers.get("x-api-key")))
+        if request.url.host == "api.test":
+            return httpx.Response(302, headers={"location": "https://other.test/data"})
+        return httpx.Response(200, json={"ok": True})
+
+    out = fetch_json(
+        "https://api.test/x", {"X-Api-Key": "s3cret"}, transport=httpx.MockTransport(handler)
+    )
+    assert out == {"ok": True}
+    assert seen == [("api.test", "s3cret"), ("other.test", None)]
+
+    def downgrade(request):
+        return httpx.Response(302, headers={"location": "http://api.test/plain"})
+
+    with pytest.raises(ValueError, match="https to http"):
+        fetch_json("https://api.test/x", {}, transport=httpx.MockTransport(downgrade))
+
+
+def test_interactive_review_continues_after_stale_fix(env):
+    store, state = env
+    state.update(payload=V2, patch=v2_agent_patch(0.8))
+    run("check", "http://x", "--model", MODEL)
+    run("check", "http://x", "--model", MODEL)  # second pending fix for the same model
+    r = run("review", *_db(store), input="a\na\n")
+    assert "stale" in r.output
+    assert store.get_pending(1).status == "approved"
+    assert store.get_pending(2).status == "pending"
+
+
+def test_unknown_pending_id_message(env):
+    store = env[0]
+    r = run("review", "--approve", "99", *_db(store))
+    assert r.exit_code == 1 and "no pending fix #99" in r.output and "'no pending" not in r.output
+
+
+def test_query_string_secrets_not_printed(env, monkeypatch):
+    def boom(url, headers):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(check_mod, "fetch_json", boom)
+    r = run("check", "http://x/api?api_key=SECRET", "--model", MODEL)
+    assert r.exit_code == 2 and "SECRET" not in r.output
+
+
+def test_init_writes_into_new_folder_with_correct_hint(tmp_path, monkeypatch):
+    import aegis_healer.cli.init_cmd as init_mod
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(init_mod, "fetch_json", lambda url, headers: [V1])
+    r = run("init", "http://x", "--name", "user-profile", "--out", "sub/m.py")
+    assert r.exit_code == 0, r.output
+    assert (tmp_path / "sub" / "m.py").exists()
+    assert "--model sub.m:UserProfile" in r.output

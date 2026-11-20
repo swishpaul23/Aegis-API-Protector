@@ -5,7 +5,7 @@ automatically: plain rules first, a LangGraph agent (Claude Haiku) only for the 
 and a validation gate in front of everything.
 
 ```bash
-pip install aegis-healer
+pip install aegis-healer      # once published; from a clone: pip install -e .
 ```
 
 ## Why
@@ -20,13 +20,13 @@ applies it.
 ```python
 import httpx
 from aegis_healer import Healer
-from app.models import User          # your Pydantic model: the contract you expect
+from app.models import User  # your Pydantic model: the contract you expect
 
 healer = Healer(auto_apply_threshold=0.9)
 result = healer.validate(httpx.get(URL).json(), User, records_path="data")
 
-result.status      # "ok" | "healed" | "pending" | "failed"
-result.records     # list[User], validated
+result.status  # "ok" | "healed" | "pending" | "failed"
+result.records  # list[User], validated
 result.raise_for_status()
 ```
 
@@ -85,10 +85,16 @@ running many workers.
 - **API data is untrusted.** Payload samples are truncated and wrapped as data in the
   prompt. The agent may only map fields it was asked about, from fields that exist, and
   every fix must pass validation, so a payload that says "ignore your instructions" can't
-  produce an applied change.
+  produce an applied change. Keys are JSON-quoted and `<`/`>` escaped so payload text
+  can't forge prompt sections. A proposal that fails its checks is never returned, and
+  the Healer re-checks scope before applying anything.
 - **Secrets**: `ANTHROPIC_API_KEY` is read from the environment only. CLI header values
   are never printed.
-- **Fetching**: `http`/`https` only, 10 s timeout, 10 MB cap, at most 5 redirects.
+- **Fetching**: `http`/`https` only, 30 s overall deadline, 10 MB cap, at most 5 redirects.
+  Redirects are followed by hand: your `--header` values are only sent to the original
+  host, and https never downgrades to http. Query strings are hidden in output.
+- **Terminal output**: text that came from the API or the LLM is escaped before printing,
+  so it can't fake rows or hide text in `aegis review`.
 - **`aegis init`** turns untrusted API keys into Python: field names are sanitised to
   identifiers, and original keys only appear as string aliases.
 
@@ -103,13 +109,26 @@ running many workers.
 
 Without an API key, Aegis runs in rules-only mode.
 
+## Limitations (v0.1)
+
+- Drift *inside* lists of objects (`items[].qty`) is detected as failed records but not
+  repaired; lists are treated as single values.
+- Models with `extra="forbid"` fail when the API adds a field; there's no "drop" mapping yet.
+- Same-name-different-meaning drift (cents vs dollars) isn't detected yet (see roadmap).
+
 ## Development
 
-```bash
-python -m venv .venv && .venv/Scripts/activate     # Windows (source .venv/bin/activate elsewhere)
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-pytest && ruff check .
+pytest
+ruff check .
 ```
+
+macOS/Linux: `source .venv/bin/activate` instead of the second line.
 
 See `examples/demo` for an end-to-end run against the original Phase 1 mock API data.
 The Phase 1 Docker/FastAPI/Postgres build is kept for reference in `legacy/phase1/`.

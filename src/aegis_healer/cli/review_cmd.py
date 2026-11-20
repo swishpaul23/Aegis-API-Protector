@@ -8,7 +8,7 @@ import typer
 from rich.panel import Panel
 from rich.table import Table
 
-from aegis_healer.cli.common import console, get_store, mapping_table
+from aegis_healer.cli.common import console, error_text, get_store, mapping_table, safe
 from aegis_healer.store import PendingPatch, StalePatchError
 from aegis_healer.store.files import FileStore
 
@@ -19,33 +19,38 @@ def _show(item: PendingPatch, details: bool = False) -> None:
     title = f"Pending fix #{item.id} · {item.model_key} · built on v{item.base_version}"
     console.print(mapping_table(item.patch.mappings, title=title))
     for u in item.patch.unmappable:
-        console.print(f"[red]✗ {u.target}[/red]: {u.reason}")
+        console.print(f"[red]✗ {safe(u.target)}[/red]: {safe(u.reason)}")
     if details:
         r = item.report
         console.print(
             Panel(
-                f"missing: {', '.join(r.missing) or '-'}\n"
-                f"unexpected: {', '.join(r.unexpected) or '-'}\n"
-                f"type changes: {', '.join(t.path for t in r.type_mismatches) or '-'}",
+                f"missing: {safe(', '.join(r.missing) or '-')}\n"
+                f"unexpected: {safe(', '.join(r.unexpected) or '-')}\n"
+                f"type changes: {safe(', '.join(t.path for t in r.type_mismatches) or '-')}",
                 title="Drift report",
                 title_align="left",
             )
         )
 
 
-def _resolve(store: FileStore, pending_id: int, approve: bool) -> None:
+def _resolve(store: FileStore, pending_id: int, approve: bool, exit_on_error: bool = True) -> bool:
     try:
         version = store.resolve_pending(pending_id, approve)
     except StalePatchError as exc:
         console.print(f"[red]✗ Fix #{pending_id} is {exc}[/red]")
-        raise typer.Exit(1) from exc
+        if exit_on_error:
+            raise typer.Exit(1) from exc
+        return False
     except (KeyError, ValueError) as exc:
-        console.print(f"[red]✗ {exc}[/red]")
-        raise typer.Exit(1) from exc
+        console.print(f"[red]✗ {safe(error_text(exc))}[/red]")
+        if exit_on_error:
+            raise typer.Exit(1) from exc
+        return False
     if approve:
         console.print(f"[green]✓ Approved fix #{pending_id} → mappings v{version}[/green]")
     else:
         console.print(f"Rejected fix #{pending_id}")
+    return True
 
 
 def review(
@@ -74,9 +79,9 @@ def review(
                 _show(item, details=True)
                 continue
             if choice in ("a", "approve"):
-                _resolve(store, item.id, True)
+                _resolve(store, item.id, True, exit_on_error=False)
             elif choice in ("r", "reject"):
-                _resolve(store, item.id, False)
+                _resolve(store, item.id, False, exit_on_error=False)
             elif choice not in ("s", "skip"):
                 console.print("Type a, r, s or d.")
                 continue
@@ -89,14 +94,17 @@ def history(
     """Show every saved mapping version for a model."""
     versions = get_store(db).history(model_key)
     if not versions:
-        console.print(f"No history for {model_key}.")
+        console.print(f"No history for {safe(model_key)}.")
         return
     table = Table(header_style="bold")
     for col in ("Version", "Fields", "Reason", "Saved"):
         table.add_column(col)
     for v in versions:
         table.add_row(
-            str(v.version), str(len(v.mappings)), v.reason, v.created_at.strftime("%Y-%m-%d %H:%M")
+            str(v.version),
+            str(len(v.mappings)),
+            safe(v.reason),
+            v.created_at.strftime("%Y-%m-%d %H:%M"),
         )
     console.print(table)
 
@@ -110,6 +118,6 @@ def rollback(
     try:
         new = get_store(db).rollback(model_key, version)
     except KeyError as exc:
-        console.print(f"[red]✗ {exc}[/red]")
+        console.print(f"[red]✗ {safe(error_text(exc))}[/red]")
         raise typer.Exit(1) from exc
     console.print(f"[green]✓ Restored v{version} as v{new}[/green]")

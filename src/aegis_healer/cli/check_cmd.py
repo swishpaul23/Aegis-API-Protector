@@ -8,11 +8,14 @@ import typer
 
 from aegis_healer.cli.common import (
     console,
+    error_text,
     fetch_json,
     get_store,
     load_model,
     mapping_table,
     parse_headers,
+    redact_url,
+    safe,
 )
 from aegis_healer.healer import Healer
 
@@ -43,17 +46,21 @@ def check(
     target = load_model(model)
     headers = parse_headers(header or [])
     if headers:
-        console.print("Headers: " + ", ".join(f"{k}: ***" for k in headers))
+        console.print("Headers: " + ", ".join(f"{safe(k)}: ***" for k in headers))
     try:
         payload = fetch_json(url, headers)
     except Exception as exc:  # network / JSON errors: report, don't traceback
-        console.print(f"[red]Could not fetch {url}:[/red] {exc}")
+        console.print(f"[red]Could not fetch {safe(redact_url(url))}:[/red] {safe(exc)}")
         raise typer.Exit(2) from exc
 
     healer = build_healer(threshold, db, persist=not dry_run)
     if healer.proposer is None:
         console.print("[dim]Agent disabled (no ANTHROPIC_API_KEY): rules only.[/dim]")
-    result = healer.validate(payload, target, records_path=records_path)
+    try:
+        result = healer.validate(payload, target, records_path=records_path)
+    except (KeyError, TypeError, ValueError) as exc:
+        console.print(f"[red]✗ Could not read records:[/red] {safe(error_text(exc))}")
+        raise typer.Exit(2) from exc
 
     if result.status == "ok":
         console.print(f"[green]✓ No drift.[/green] {len(result.records)} record(s) valid.")
@@ -66,7 +73,7 @@ def check(
         if result.proposed and result.proposed.mappings:
             console.print(mapping_table(result.proposed.mappings))
         for u in result.proposed.unmappable if result.proposed else []:
-            console.print(f"[red]✗ {u.target}[/red]: {u.reason}")
+            console.print(f"[red]✗ {safe(u.target)}[/red]: {safe(u.reason)}")
         if result.status == "healed":
             saved = "" if dry_run else " Saved to the store."
             console.print(f"[green]✓ Healed {len(result.records)} record(s).{saved}[/green]")
@@ -76,7 +83,7 @@ def check(
                 if result.pending_id
                 else ""
             )
-            console.print(f"[yellow]Pending: {result.message}{where}[/yellow]")
+            console.print(f"[yellow]Pending: {safe(result.message)}{where}[/yellow]")
         else:
-            console.print(f"[red]✗ {result.message}[/red]")
+            console.print(f"[red]✗ {safe(result.message)}[/red]")
     raise typer.Exit(EXIT[result.status])

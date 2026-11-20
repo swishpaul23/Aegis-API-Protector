@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import typer
 from dotenv import load_dotenv
 
@@ -14,6 +16,7 @@ app = typer.Typer(
     help="Aegis | API Healer: detect API schema drift and repair it.",
     no_args_is_help=True,
     add_completion=False,
+    pretty_exceptions_show_locals=False,  # never dump locals (headers, keys) on a crash
 )
 app.command()(check)
 app.command()(review)
@@ -25,3 +28,11 @@ app.command()(init)
 @app.callback()
 def _main() -> None:
     load_dotenv()  # CLI only: the library never reads .env on its own
+    # Legacy Windows consoles (cp1252) can't print ✓ ✗: replace rather than crash.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(errors="replace")
+            except (ValueError, OSError):
+                pass

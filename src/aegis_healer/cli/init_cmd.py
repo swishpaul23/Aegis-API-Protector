@@ -7,9 +7,25 @@ from typing import Annotated
 
 import typer
 
-from aegis_healer.cli.common import console, fetch_json, parse_headers
-from aegis_healer.codegen import generate_models
+from aegis_healer.cli.common import (
+    console,
+    error_text,
+    fetch_json,
+    parse_headers,
+    redact_url,
+    safe,
+)
+from aegis_healer.codegen import class_name, generate_models
 from aegis_healer.paths import get_path
+
+
+def _module_for(out: Path) -> str:
+    """Dotted module path for --model, relative to the current folder when possible."""
+    try:
+        rel = out.resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        return out.stem
+    return ".".join(rel.with_suffix("").parts)
 
 
 def init(
@@ -22,20 +38,23 @@ def init(
 ) -> None:
     """Write a Pydantic model inferred from the API's current response."""
     if out.exists() and not force:
-        console.print(f"[red]✗ {out} exists. Use --force to overwrite.[/red]")
+        console.print(f"[red]✗ {safe(out)} exists. Use --force to overwrite.[/red]")
         raise typer.Exit(1)
     try:
         payload = fetch_json(url, parse_headers(header or []))
     except Exception as exc:
-        console.print(f"[red]Could not fetch {url}:[/red] {exc}")
+        console.print(f"[red]Could not fetch {safe(redact_url(url))}:[/red] {safe(exc)}")
         raise typer.Exit(2) from exc
-    data = get_path(payload, records_path) if records_path else payload
-    records = data if isinstance(data, list) else [data]
     try:
+        data = get_path(payload, records_path) if records_path else payload
+        records = data if isinstance(data, list) else [data]
         source = generate_models(records, name)
-    except ValueError as exc:
-        console.print(f"[red]✗ {exc}[/red]")
-        raise typer.Exit(1) from exc
+    except (KeyError, TypeError, ValueError) as exc:
+        console.print(f"[red]✗ Could not infer a model:[/red] {safe(error_text(exc))}")
+        raise typer.Exit(2) from exc
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(source, encoding="utf-8")
-    console.print(f"[green]✓ Wrote {out}[/green] from {len(records)} record(s).")
-    console.print(f"Next: aegis check {url} --model {out.stem}:{name}")
+    console.print(f"[green]✓ Wrote {safe(out)}[/green] from {len(records)} record(s).")
+    console.print(
+        f"Next: aegis check {safe(redact_url(url))} --model {_module_for(out)}:{class_name(name)}"
+    )

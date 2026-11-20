@@ -10,7 +10,9 @@ cd examples\demo
 python -m http.server 8000          # terminal 1
 ```
 
-In terminal 2 (same folder, venv active, `ANTHROPIC_API_KEY` in `.env` or the environment):
+In terminal 2 (same folder, venv active, `ANTHROPIC_API_KEY` in `.env` or the environment).
+Aegis creates its `.aegis\` folder in whatever folder you run it from, here `examples\demo`.
+Without a key, steps 2 to 4 stop at "agent disabled" (rules only).
 
 ```powershell
 # 1. Original API: no drift (exit 0)
@@ -32,3 +34,5 @@ aegis history models.UserProfile
 ```
 
 Want a model for a new API? `aegis init http://localhost:8000/v1.json --name UserProfile --out mine.py`
+(it infers `signup_date: datetime` from the data, where the hand-written `models.py` uses `str`:
+both are valid contracts.)
