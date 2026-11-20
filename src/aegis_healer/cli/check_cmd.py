@@ -12,6 +12,7 @@ from aegis_healer.agent.privacy import Privacy
 from aegis_healer.cli.common import (
     console,
     error_text,
+    fetch_error_text,
     fetch_json,
     get_store,
     load_model,
@@ -92,7 +93,9 @@ def check(
     try:
         payload = fetch_json(url, headers)
     except Exception as exc:  # network / JSON errors: report, don't traceback
-        console.print(f"[red]Could not fetch {safe(redact_url(url))}:[/red] {safe(exc)}")
+        console.print(
+            f"[red]Could not fetch {safe(redact_url(url))}:[/red] {safe(fetch_error_text(exc))}"
+        )
         raise typer.Exit(2) from exc
 
     healer = build_healer(

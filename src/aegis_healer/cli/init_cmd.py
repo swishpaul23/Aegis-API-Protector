@@ -10,6 +10,7 @@ import typer
 from aegis_healer.cli.common import (
     console,
     error_text,
+    fetch_error_text,
     fetch_json,
     parse_headers,
     redact_url,
@@ -43,7 +44,9 @@ def init(
     try:
         payload = fetch_json(url, parse_headers(header or []))
     except Exception as exc:
-        console.print(f"[red]Could not fetch {safe(redact_url(url))}:[/red] {safe(exc)}")
+        console.print(
+            f"[red]Could not fetch {safe(redact_url(url))}:[/red] {safe(fetch_error_text(exc))}"
+        )
         raise typer.Exit(2) from exc
     try:
         data = get_path(payload, records_path) if records_path else payload

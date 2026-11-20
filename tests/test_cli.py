@@ -241,3 +241,39 @@ def test_check_privacy_passed_through(env, monkeypatch):
     monkeypatch.setattr(check_mod, "build_healer", build)
     assert run("check", "http://x", "--model", MODEL, "--privacy", "schema").exit_code == 0
     assert seen["privacy"] == "schema"
+
+
+def _status_error(url, headers):
+    request = httpx.Request("GET", "http://x/api?api_key=SECRET123")
+    response = httpx.Response(403, request=request)
+    raise httpx.HTTPStatusError(
+        "Client error '403 Forbidden' for url 'http://x/api?api_key=SECRET123'",
+        request=request,
+        response=response,
+    )
+
+
+def test_check_fetch_status_error_hides_query(env, monkeypatch):
+    monkeypatch.setattr(check_mod, "fetch_json", _status_error)
+    r = run("check", "http://x/api?api_key=SECRET123", "--model", MODEL)
+    assert r.exit_code == 2
+    assert "SECRET123" not in r.output and "HTTP 403" in r.output
+
+
+def test_init_fetch_status_error_hides_query(tmp_path, monkeypatch):
+    import aegis_healer.cli.init_cmd as init_mod
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(init_mod, "fetch_json", _status_error)
+    r = run("init", "http://x/api?api_key=SECRET123")
+    assert r.exit_code == 2
+    assert "SECRET123" not in r.output and "HTTP 403" in r.output
+
+
+def test_fetch_other_error_shows_type_only(env, monkeypatch):
+    def boom(url, headers):
+        raise ValueError("bad thing at http://x/api?api_key=SECRET123")
+
+    monkeypatch.setattr(check_mod, "fetch_json", boom)
+    r = run("check", "http://x/api?api_key=SECRET123", "--model", MODEL)
+    assert r.exit_code == 2 and "SECRET123" not in r.output and "ValueError" in r.output
