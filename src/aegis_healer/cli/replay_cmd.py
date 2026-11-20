@@ -36,10 +36,18 @@ def replay(
             console.print(f"[red]✗ No quarantine batch {safe(batch)} for {safe(model)}.[/red]")
             raise typer.Exit(1)
     healer = Healer(store=store, proposer=None)  # replay never calls the LLM
-    result = run_replay(quarantine, healer, cls, batch, remove=False)
+    try:
+        result = run_replay(quarantine, healer, cls, batch, remove=False)
+    except (ValueError, OSError) as exc:  # the text can hold payload: show the type only
+        console.print(f"[red]✗ Replay failed ({type(exc).__name__}).[/red]")
+        raise typer.Exit(1) from exc
 
-    if out is None:
-        console.print(f"Would release {len(result.released)} record(s).")
+    released = len(result.released)
+    failed: list[str] = []
+    if not released:
+        console.print("Nothing to release.")
+    elif out is None:
+        console.print(f"Would release {released} record(s).")
     else:
         lines = [json.dumps(r.model_dump(mode="json")) + "\n" for r in result.released]
         try:
@@ -48,15 +56,20 @@ def replay(
             console.print(f"[red]✗ Could not write {safe(out)}: {safe(error_text(exc))}[/red]")
             raise typer.Exit(1) from exc
         failed = remove_batches(quarantine, result.batches_cleared)
-        console.print(f"Released {len(result.released)} record(s) to {safe(out)}.")
-        for batch_id in failed:
-            console.print(f"[yellow]! Batch {safe(batch_id)} could not be removed.[/yellow]")
+        console.print(f"Released {released} record(s) to {safe(out)}.")
     console.print(f"Still blocked: {result.still_blocked} record(s).")
-    if out is None:
+    if released and out is None:
         console.print(
             "Nothing removed. Re-run with --out FILE to save released records, "
             "or use Pipeline to load them."
         )
+    if failed:
+        ids = ", ".join(safe(b) for b in failed)
+        console.print(
+            f"[red]✗ Could not remove batch(es) {ids}; "
+            "re-running will export their records again.[/red]"
+        )
     if result.still_blocked:
         console.print("Approve the pending fix first: aegis review")
+    if failed or result.still_blocked:
         raise typer.Exit(1)

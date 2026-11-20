@@ -262,3 +262,48 @@ def test_healer_quarantine_valueerror_swallowed(tmp_path, monkeypatch):
     store = FileStore(tmp_path / ".aegis")
     r = Healer(store=store, proposer=None).validate([V2], User)
     assert r.status == "failed" and r.quarantine_id is None
+
+
+def test_cli_replay_exception_is_clean(tmp_path, monkeypatch):
+    import aegis_healer.cli.replay_cmd as mod
+
+    store = approved(tmp_path)
+
+    def boom(*a, **k):
+        raise ValueError("payload-ish secret")
+
+    monkeypatch.setattr(mod, "run_replay", boom)
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--db", str(store.root)])
+    assert r.exit_code == 1
+    assert "Traceback" not in r.output and "secret" not in r.output
+    assert "ValueError" in r.output
+
+
+def test_cli_out_untouched_when_nothing_released(tmp_path):
+    store, _, _ = pending_setup(tmp_path)  # not approved: nothing releasable
+    out = tmp_path / "keep.jsonl"
+    out.write_text("precious\n", encoding="utf-8")
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
+    assert out.read_text(encoding="utf-8") == "precious\n"
+    assert "Nothing to release." in r.output
+
+
+def test_cli_no_nothing_removed_note_when_zero(tmp_path):
+    store, _, _ = pending_setup(tmp_path)
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--db", str(store.root)])
+    assert "Nothing removed" not in r.output
+    assert "Nothing to release." in r.output
+
+
+def test_cli_out_remove_failure_exits_1(tmp_path, monkeypatch):
+    store = approved(tmp_path)
+    out = tmp_path / "o.jsonl"
+
+    def boom(self, batch_id):
+        raise PermissionError("nope")
+
+    monkeypatch.setattr(Quarantine, "remove", boom)
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
+    assert r.exit_code == 1
+    assert "re-running will export their records again" in r.output
+    assert out.exists()
