@@ -11,7 +11,7 @@ import typer
 from aegis_healer.cli.common import console, error_text, get_store, load_model, safe
 from aegis_healer.healer import Healer
 from aegis_healer.paths import model_key
-from aegis_healer.quarantine import Quarantine, atomic_write, remove_batches
+from aegis_healer.quarantine import Quarantine, apply_replay, atomic_write
 from aegis_healer.quarantine import replay as run_replay
 
 
@@ -42,20 +42,32 @@ def replay(
         console.print(f"[red]✗ Replay failed ({type(exc).__name__}).[/red]")
         raise typer.Exit(1) from exc
 
-    released = len(result.released)
+    # The same record can sit in several batches: release it once.
+    records, seen = [], set()
+    for r in result.released:
+        dump = r.model_dump_json()
+        if dump not in seen:
+            seen.add(dump)
+            records.append(r)
+    released = len(records)
     failed: list[str] = []
     if not released:
         console.print("Nothing to release.")
     elif out is None:
         console.print(f"Would release {released} record(s).")
     else:
-        lines = [json.dumps(r.model_dump(mode="json")) + "\n" for r in result.released]
+        if out.exists():
+            console.print(
+                f"[red]✗ {safe(out)} exists; choose a new file (nothing was removed).[/red]"
+            )
+            raise typer.Exit(1)
+        lines = [json.dumps(r.model_dump(mode="json")) + "\n" for r in records]
         try:
             atomic_write(out, "".join(lines))  # saved before anything is removed
         except OSError as exc:
             console.print(f"[red]✗ Could not write {safe(out)}: {safe(error_text(exc))}[/red]")
             raise typer.Exit(1) from exc
-        failed = remove_batches(quarantine, result.batches_cleared)
+        failed = apply_replay(quarantine, result)
         console.print(f"Released {released} record(s) to {safe(out)}.")
     console.print(f"Still blocked: {result.still_blocked} record(s).")
     if released and out is None:
@@ -66,10 +78,15 @@ def replay(
     if failed:
         ids = ", ".join(safe(b) for b in failed)
         console.print(
-            f"[red]✗ Could not remove batch(es) {ids}; "
+            f"[red]✗ Could not update batch(es) {ids}; "
             "re-running will export their records again.[/red]"
         )
-    if result.still_blocked:
+    if result.still_blocked and not released:
         console.print("Approve the pending fix first: aegis review")
+    elif result.still_blocked:
+        console.print(
+            "The rest still fail with the current mappings and stay quarantined "
+            "(see aegis review for open fixes)."
+        )
     if failed or result.still_blocked:
         raise typer.Exit(1)

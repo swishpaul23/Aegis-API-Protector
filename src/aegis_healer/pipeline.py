@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from aegis_healer.healer import Healer, HealResult, Status
 from aegis_healer.paths import model_key
-from aegis_healer.quarantine import Quarantine, remove_batches, replay
+from aegis_healer.quarantine import Quarantine, apply_replay, replay
 
 
 class PipelineRun(BaseModel):
@@ -68,9 +68,9 @@ class Pipeline:
                         sunk.add(dump)
                         fresh.append(r)
                 if fresh:
-                    self.sink(fresh)  # remove only after the sink accepted them
+                    self.sink(fresh)  # change quarantine only after the sink accepted them
                     loaded += len(fresh)
-                remove_batches(quarantine, released.batches_cleared)  # logs a warning per failure
+                apply_replay(quarantine, released)  # logs a warning per failed batch
             key = model_key(self.model)
             remaining = sum(len(b.records) for b in quarantine.list(key))
         return PipelineRun(

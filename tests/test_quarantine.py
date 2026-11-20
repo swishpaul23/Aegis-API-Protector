@@ -93,14 +93,14 @@ def test_replay_without_approval_keeps_batch(tmp_path):
     assert len(store.list_pending()) == 1  # replay never creates new pending fixes
 
 
-def test_replay_partial_batch_untouched(tmp_path):
+def test_replay_partial_batch_releases_valid_part(tmp_path):
     store = FileStore(tmp_path / ".aegis")
     q = Quarantine(store.root)
     q.add(KEY, [V1, V2], "pending", None)
     out = replay(q, Healer(store=store, proposer=None), User)
-    assert out.released == []
+    assert len(out.released) == 1  # V1 validates as-is; V2 stays
     assert out.still_blocked == 1
-    assert len(q.list()) == 1
+    assert [b.records for b in q.list()] == [[V2]]
 
 
 def test_replay_ignores_other_models_and_filters_batch(tmp_path):
@@ -307,3 +307,96 @@ def test_cli_out_remove_failure_exits_1(tmp_path, monkeypatch):
     assert r.exit_code == 1
     assert "re-running will export their records again" in r.output
     assert out.exists()
+
+
+# ── partial release (final review item 1) ─────────────────────
+def _mixed_batch(tmp_path):
+    """Approved mappings heal V2 but not a record whose id can't become an int."""
+    store = FileStore(tmp_path / ".aegis")
+    q = Quarantine(store.root)
+    healed = Healer(store=store, proposer=FakeProposer(v2_agent_patch(0.95))).validate(V2, User)
+    assert healed.status == "healed"
+    bad = {**V2, "id": "abc"}
+    bid = q.add(KEY, [V2, {**V2, "id": "2"}, bad], "pending", 1)
+    return store, q, bid, bad
+
+
+def test_replay_partial_batch_reduced(tmp_path):
+    store, q, bid, bad = _mixed_batch(tmp_path)
+    out = replay(q, Healer(store=store, proposer=None), User)
+    assert len(out.released) == 2
+    assert out.still_blocked == 1
+    assert out.batches_reduced == [bid] and out.batches_cleared == []
+    (batch,) = q.list()
+    assert batch.id == bid and batch.records == [bad]
+
+
+def test_replay_remove_false_then_apply(tmp_path):
+    from aegis_healer.quarantine import apply_replay
+
+    store, q, bid, bad = _mixed_batch(tmp_path)
+    out = replay(q, Healer(store=store, proposer=None), User, remove=False)
+    assert out.batches_reduced == [bid]
+    assert len(q.list()[0].records) == 3  # untouched until the caller applies it
+    assert apply_replay(q, out) == []
+    assert q.list()[0].records == [bad]
+
+
+def test_apply_replay_rewrite_failure_keeps_batch(tmp_path, monkeypatch, caplog):
+    import aegis_healer.quarantine as qmod
+
+    store, q, bid, _ = _mixed_batch(tmp_path)
+    out = replay(q, Healer(store=store, proposer=None), User, remove=False)
+
+    def boom(path, text):
+        raise PermissionError("nope V5A")
+
+    monkeypatch.setattr(qmod, "atomic_write", boom)
+    assert qmod.apply_replay(q, out) == [bid]
+    monkeypatch.undo()
+    assert len(q.list()[0].records) == 3
+    assert bid in caplog.text and "V5A" not in caplog.text
+
+
+def test_cli_replay_partial_release(tmp_path):
+    store, q, bid, bad = _mixed_batch(tmp_path)
+    out = tmp_path / "released.jsonl"
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
+    assert len(out.read_text(encoding="utf-8").splitlines()) == 2
+    assert "Released 2 record(s)" in r.output
+    assert "Still blocked: 1" in r.output
+    assert "Approve the pending fix first" not in r.output
+    assert q.list()[0].records == [bad]
+
+
+def test_cli_replay_out_refuses_to_overwrite(tmp_path):
+    store = approved(tmp_path)
+    out = tmp_path / "o.jsonl"
+    out.write_text("precious\n", encoding="utf-8")
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
+    assert r.exit_code == 1
+    assert "exists" in r.output and "Traceback" not in r.output
+    assert out.read_text(encoding="utf-8") == "precious\n"
+    assert len(Quarantine(store.root).list()) == 1
+
+
+def test_cli_replay_out_dedupes_across_batches(tmp_path):
+    store = approved(tmp_path)
+    q = Quarantine(store.root)
+    q.add(KEY, [V2], "pending", 99)  # the same record quarantined twice
+    out = tmp_path / "o.jsonl"
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
+    assert r.exit_code == 0, r.output
+    assert len(out.read_text(encoding="utf-8").splitlines()) == 1
+    assert q.list() == []
+
+
+def test_gitignore_restored_on_merge_and_rewrite(tmp_path):
+    store, q, bid, _ = _mixed_batch(tmp_path)
+    gi = store.root / ".gitignore"
+    gi.unlink()
+    q.add_or_merge(KEY, [{**V2, "id": "3"}], "pending", 1)
+    assert "quarantine/" in gi.read_text(encoding="utf-8").splitlines()
+    gi.unlink()
+    replay(q, Healer(store=store, proposer=None), User)
+    assert "quarantine/" in gi.read_text(encoding="utf-8").splitlines()

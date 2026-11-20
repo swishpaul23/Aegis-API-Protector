@@ -38,7 +38,12 @@ class ReplayResult(BaseModel):
     released: list[Any] = Field(default_factory=list)
     still_blocked: int = 0
     batches_cleared: list[str] = Field(default_factory=list)
+    batches_reduced: list[str] = Field(default_factory=list)
     remove_failed: list[str] = Field(default_factory=list)
+    # batch id -> records that still fail, for rewriting reduced batches (holds payload)
+    remaining: dict[str, list[dict[str, Any]]] = Field(
+        default_factory=dict, exclude=True, repr=False
+    )
 
 
 def atomic_write(path: Path, text: str) -> None:
@@ -85,11 +90,7 @@ class Quarantine:
             created_at=now,
             records=records,
         )
-        self._ensure_gitignore()
-        atomic_write(
-            self.dir / f"{batch_id}.json",
-            json.dumps(batch.model_dump(mode="json"), indent=2, default=str) + "\n",
-        )
+        self._write(batch)
         return batch_id
 
     def add_or_merge(
@@ -111,11 +112,21 @@ class Quarantine:
                 fresh.append(record)
         if fresh:
             batch.records = batch.records + fresh
-            atomic_write(
-                self.dir / f"{batch.id}.json",
-                json.dumps(batch.model_dump(mode="json"), indent=2, default=str) + "\n",
-            )
+            self._write(batch)
         return batch.id
+
+    def _write(self, batch: QuarantineBatch) -> None:
+        self._ensure_gitignore()
+        atomic_write(
+            self.dir / f"{_check_id(batch.id)}.json",
+            json.dumps(batch.model_dump(mode="json"), indent=2, default=str) + "\n",
+        )
+
+    def rewrite(self, batch_id: str, records: list[dict[str, Any]]) -> None:
+        """Replace a batch's records in place (same id), atomically."""
+        batch = self.load(batch_id)
+        batch.records = records
+        self._write(batch)
 
     def load(self, batch_id: str) -> QuarantineBatch:
         path = self.dir / f"{_check_id(batch_id)}.json"
@@ -160,6 +171,27 @@ def remove_batches(quarantine: Quarantine, batch_ids: list[str]) -> list[str]:
     return failed
 
 
+def apply_replay(quarantine: Quarantine, result: ReplayResult) -> list[str]:
+    """Remove cleared batches and shrink reduced ones to their still-failing records.
+
+    Call only once the released records are safe (sunk or written). A batch that can't be
+    changed is kept as it was (its released records will be released again next time);
+    the returned ids are also recorded in `result.remove_failed`.
+    """
+    failed = remove_batches(quarantine, result.batches_cleared)
+    for batch_id in result.batches_reduced:
+        try:
+            quarantine.rewrite(batch_id, result.remaining[batch_id])
+        except (OSError, ValueError, KeyError):
+            # Never echo the exception: it can hold payload text.
+            logging.getLogger("aegis_healer").warning(
+                "could not rewrite quarantine batch %s", batch_id
+            )
+            failed.append(batch_id)
+    result.remove_failed = failed
+    return failed
+
+
 def replay(
     quarantine: Quarantine,
     healer: Healer,
@@ -169,8 +201,11 @@ def replay(
 ) -> ReplayResult:
     """Re-check quarantined records against the current active mappings only.
 
-    No matcher, no agent, no new pending fix, no run log. A batch is released only if
-    every record in it validates; otherwise it is left untouched.
+    No matcher, no agent, no new pending fix, no run log. Every record that validates is
+    released. A batch whose records all validate is cleared; a batch with some records
+    still failing is reduced to those records (same id). With `remove=True` that happens
+    here; with `remove=False` the caller applies it with `apply_replay` once the released
+    records are safe.
     """
     from aegis_healer.healer import Healer as _Healer
 
@@ -183,11 +218,13 @@ def replay(
     result = ReplayResult()
     for batch in batches:
         valid, failing = _Healer._split(batch.records, mappings, model)
-        if failing:
-            result.still_blocked += len(failing)
-            continue
         result.released += valid
-        result.batches_cleared.append(batch.id)
-    if remove:  # remove only after every result is collected
-        result.remove_failed = remove_batches(quarantine, result.batches_cleared)
+        result.still_blocked += len(failing)
+        if not failing:
+            result.batches_cleared.append(batch.id)
+        elif valid:
+            result.batches_reduced.append(batch.id)
+            result.remaining[batch.id] = failing
+    if remove:  # change files only after every result is collected
+        apply_replay(quarantine, result)
     return result

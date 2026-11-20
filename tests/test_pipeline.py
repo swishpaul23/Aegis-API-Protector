@@ -154,3 +154,23 @@ def test_no_replay_when_not_persisting(tmp_path):
     run = pipe.run()
     assert sunk == [] and run.loaded == 0
     assert len(Quarantine(store.root).list()) == 1
+
+
+def test_approved_still_failing_fix_releases_healable_records(tmp_path):
+    """Item 1 E2E: 7 records, 1 unfixable -> pending -> approve -> 6 released, 1 kept."""
+    store = FileStore(tmp_path / ".aegis")
+    # Confidence above threshold: the fix is pending only because a record still fails.
+    healer = Healer(store=store, proposer=FakeProposer(v2_agent_patch(0.95)))
+    batch = [{**V2, "id": str(i)} for i in range(1, 7)] + [{**V2, "id": "abc"}]
+    sunk: list = []
+    first = Pipeline(lambda: batch, User, sunk.extend, healer=healer).run()
+    assert first.status == "pending" and "still fail" in first.result.message
+    assert first.quarantined == 7 and sunk == []
+    store.resolve_pending(first.pending_id, True)
+    run = Pipeline(lambda: [], User, sunk.extend, healer=healer).run()
+    assert sorted(r.user_id for r in sunk) == [1, 2, 3, 4, 5, 6]
+    assert run.loaded == 6 and run.quarantined == 1
+    (left,) = Quarantine(store.root).list()
+    assert left.records == [{**V2, "id": "abc"}]
+    again = Pipeline(lambda: [], User, sunk.extend, healer=healer).run()
+    assert again.loaded == 0 and len(sunk) == 6  # exactly once
