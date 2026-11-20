@@ -1,11 +1,14 @@
 .env
 .venv/
+venv/
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.egg-info/
 dist/
+build/
 .mypy_cache/
 .ruff_cache/
-*.cpython-*.pyc
+.pytest_cache/
 pyvenv.cfg
+# Demo run state (commit .aegis/ in real projects)
+examples/demo/.aegis/
