@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from aegis_healer.cli.common import console, error_text, get_store, mapping_table, safe
+from aegis_healer.quarantine import Quarantine
 from aegis_healer.store import PendingPatch, StalePatchError
 from aegis_healer.store.files import FileStore
 
@@ -33,6 +34,19 @@ def _show(item: PendingPatch, details: bool = False) -> None:
         )
 
 
+def _replay_hint(store: FileStore, pending_id: int) -> None:
+    try:
+        key = store.get_pending(pending_id).model_key
+        if not Quarantine(store.root).list(key):
+            return
+    except (KeyError, ValueError, OSError):
+        return
+    module, _, name = key.rpartition(".")
+    console.print(
+        f"Run 'aegis replay --model {safe(module)}:{safe(name)}' to release quarantined records."
+    )
+
+
 def _resolve(store: FileStore, pending_id: int, approve: bool, exit_on_error: bool = True) -> bool:
     try:
         version = store.resolve_pending(pending_id, approve)
@@ -48,6 +62,7 @@ def _resolve(store: FileStore, pending_id: int, approve: bool, exit_on_error: bo
         return False
     if approve:
         console.print(f"[green]✓ Approved fix #{pending_id} → mappings v{version}[/green]")
+        _replay_hint(store, pending_id)
     else:
         console.print(f"Rejected fix #{pending_id}")
     return True

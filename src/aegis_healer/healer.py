@@ -13,6 +13,7 @@ from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.matcher import match
 from aegis_healer.paths import flatten, get_path, model_key, model_paths
+from aegis_healer.quarantine import Quarantine
 from aegis_healer.runlog import RunRecord, append_run, run_message
 from aegis_healer.store import MappingStore, default_store, merge
 from aegis_healer.types import (
@@ -46,6 +47,7 @@ class HealResult(BaseModel):
     report: DriftReport | None = None
     message: str = ""
     usage: Usage = Field(default_factory=Usage)
+    quarantine_id: str | None = None
 
     def raise_for_status(self) -> HealResult:
         if self.status not in ("ok", "healed"):
@@ -86,6 +88,7 @@ class Healer:
         persist: bool = True,
         privacy: Privacy = "masked",
         max_llm_calls: int | None = 10,
+        quarantine: bool = True,
     ) -> None:
         if max_llm_calls is not None and max_llm_calls < 0:
             raise ValueError("max_llm_calls must be >= 0 or None")
@@ -105,6 +108,7 @@ class Healer:
         self.persist = persist
         self.privacy = privacy
         self.max_llm_calls = max_llm_calls
+        self.quarantine = quarantine
 
     # ── helpers ─────────────────────────────────────────────
     @staticmethod
@@ -157,10 +161,27 @@ class Healer:
         model: type[BaseModel],
         records_path: str | None = None,
     ) -> HealResult:
-        result, count = self._validate(payload, model, records_path)
+        result, failing, count = self._validate(payload, model, records_path)
         if self.persist:
+            self._quarantine(model, result, failing)
             self._log_run(model, result, count)
         return result
+
+    def _quarantine(
+        self, model: type[BaseModel], result: HealResult, failing: list[dict[str, Any]]
+    ) -> None:
+        root = getattr(self.store, "root", None)
+        if root is None or not self.quarantine or result.status not in ("pending", "failed"):
+            return
+        if not failing:
+            return
+        try:
+            # The reason is the status only: payload values must never leak into it.
+            result.quarantine_id = Quarantine(root).add(
+                model_key(model), failing, result.status, result.pending_id
+            )
+        except OSError as exc:  # keep the pipeline flowing; the records are in the caller's hands
+            logging.getLogger("aegis_healer").warning("could not quarantine records: %s", exc)
 
     def _log_run(self, model: type[BaseModel], result: HealResult, count: int) -> None:
         root = getattr(self.store, "root", None)
@@ -187,12 +208,18 @@ class Healer:
         payload: dict[str, Any] | list[dict[str, Any]],
         model: type[BaseModel],
         records_path: str | None,
-    ) -> tuple[HealResult, int]:
+    ) -> tuple[HealResult, list[dict[str, Any]], int]:
         records = self._extract(payload, records_path)
-        result = self._run(records, model)
-        return result, len(records)
+        failing: list[dict[str, Any]] = []
+        result = self._run(records, model, failing)
+        return result, failing, len(records)
 
-    def _run(self, records: list[dict[str, Any]], model: type[BaseModel]) -> HealResult:
+    def _run(
+        self,
+        records: list[dict[str, Any]],
+        model: type[BaseModel],
+        failing_out: list[dict[str, Any]] | None = None,
+    ) -> HealResult:
         if not records:
             return HealResult(status="ok")
 
@@ -201,6 +228,8 @@ class Healer:
         valid, failing = self._split(records, active, model)
         if not failing:
             return HealResult(status="ok", records=valid)
+        if failing_out is not None:
+            failing_out.extend(failing)
 
         # Records can drift in different ways in one batch: heal each shape in turn.
         groups: dict[tuple, list[dict[str, Any]]] = {}
