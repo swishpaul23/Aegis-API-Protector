@@ -100,7 +100,8 @@ approved since. Sinks must be idempotent because an API may re-serve records. Se
 - **CLI**: `aegis review` (interactive), or `aegis review --approve ID` / `--reject ID`.
 - **Webhook**: set `AEGIS_WEBHOOK_URL` to get pinged when a fix goes pending (see Notifications).
 - **Pull requests**: `examples/github-actions` runs `aegis check` on a schedule and opens a
-  PR per fix. Merging the PR is the approval; closing it is the rejection.
+  PR per fix. Merging the PR is the approval; closing it means "not this fix" (the next
+  run proposes again unless you change the model or set `AEGIS_PAUSED=true`).
 
 ## Privacy
 
@@ -133,7 +134,8 @@ Messages are categorical (no API values) unless you use `--privacy full`.
 Records that can't be loaded yet are saved under `.aegis/quarantine/` (gitignored: it may
 hold PII). Once a fix is approved, `Pipeline.run()` replays them into your sink and deletes
 the batch only after the insert succeeded. `aegis replay --model models:User` previews
-what would be released without changing anything; add `--out FILE` to export it.
+what would be released without changing anything. With `--out FILE` it writes the released
+records to the file **and removes the cleared quarantine batches**.
 
 ## Notifications
 

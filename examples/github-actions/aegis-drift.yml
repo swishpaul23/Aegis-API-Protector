@@ -10,9 +10,16 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: aegis-drift
+  cancel-in-progress: false
+
 jobs:
   check:
+    # Set the repository variable AEGIS_PAUSED=true to stop proposing fixes.
+    if: vars.AEGIS_PAUSED != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # Pin actions to full commit SHAs for supply-chain safety (major tags shown for readability).
       - uses: actions/checkout@v4
@@ -20,13 +27,26 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Skip while a review PR is open
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          open_reviews=$(gh pr list --state open --json headRefName --jq '[.[] | select(.headRefName | startswith("aegis/review-"))] | length')
+          if [ "$open_reviews" != "0" ]; then
+            echo "::notice::An Aegis review PR is still open; skipping this run."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Aegis
+        if: steps.gate.outputs.skip != 'true'
         env:
           AEGIS_PIP_SPEC: ${{ vars.AEGIS_PIP_SPEC || 'aegis-healer' }}
         run: pip install "$AEGIS_PIP_SPEC"
 
       - name: Check for drift
         id: check
+        if: steps.gate.outputs.skip != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AEGIS_URL: ${{ vars.AEGIS_URL }}
@@ -45,13 +65,22 @@ jobs:
           echo "Aegis could not fix the drift (exit 2)."
           exit 1
 
+      - name: Fail on unexpected exit code
+        if: steps.check.outputs.exit_code != '' && steps.check.outputs.exit_code != '0' && steps.check.outputs.exit_code != '1' && steps.check.outputs.exit_code != '2'
+        env:
+          EXIT_CODE: ${{ steps.check.outputs.exit_code }}
+        run: |
+          echo "aegis check exited with unexpected code $EXIT_CODE."
+          exit 1
+
       - name: Open PR for auto-applied fix
         if: steps.check.outputs.exit_code == '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: aegis/auto-${{ github.run_id }}
         run: |
-          git add .aegis
+          # runs.jsonl is deliberately not staged: it changes on every run.
+          git add .aegis/mappings .aegis/history
           if git diff --cached --quiet; then
             echo "No changes to .aegis; nothing to do."
             exit 0
@@ -85,12 +114,12 @@ jobs:
               try:
                   data = json.loads(path.read_text(encoding="utf-8"))
                   if data.get("status") == "pending":
-                      print(data["id"])
+                      print(str(data["id"]))
               except (OSError, ValueError, AttributeError, KeyError):
                   continue
           PY
           if [ ! -s pending-ids.txt ]; then
-            echo "No pending fixes found."
+            echo "aegis exited 1 without a pending fix (possible crash or usage error)."
             exit 1
           fi
           git config user.name "github-actions[bot]"
@@ -101,7 +130,7 @@ jobs:
             aegis review --approve "$id"
             title_ids="${title_ids:+$title_ids, }#$id"
           done < pending-ids.txt
-          git add .aegis
+          git add .aegis/pending .aegis/mappings .aegis/history
           if git diff --cached --quiet; then
             echo "No changes to .aegis; nothing to do."
             exit 0
