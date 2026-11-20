@@ -1,0 +1,10 @@
+[
+  {"userId": "a3f1-b8c2-1001", "emailAddress": "alice@example.com", "first_name": "Alice",
+   "last_name": "Johnson", "signupTimestamp": 1686787200, "status": "active",
+   "contactInfo": {"mailingAddress": {"streetLine1": "742 Evergreen Terrace", "city": "Springfield",
+                                      "region": "IL", "postalCode": "62704"}}},
+  {"userId": "a3f1-b8c2-1002", "emailAddress": "bob@example.com", "first_name": "Bob",
+   "last_name": "Smith", "signupTimestamp": 1705881600, "status": "inactive",
+   "contactInfo": {"mailingAddress": {"streetLine1": "123 Maple Drive", "city": "Shelbyville",
+                                      "region": "IL", "postalCode": "62565"}}}
+]
