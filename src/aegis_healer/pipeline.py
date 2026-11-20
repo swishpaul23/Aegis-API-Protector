@@ -39,6 +39,13 @@ class Pipeline:
         self.records_path = records_path
 
     def run(self) -> PipelineRun:
+        """Fetch, heal, load, then release approved quarantined records.
+
+        If the sink raises, the exception propagates: the healer's own writes (mappings,
+        pending fixes, quarantine, run log) are already done, and quarantined batches are
+        kept. Records sunk before the failure will be sunk again on the next fetch, so sinks
+        must be idempotent (upsert by key).
+        """
         payload = self.fetch()  # errors propagate: the caller's scheduler retries
         result = self.healer.validate(payload, self.model, self.records_path)
         loaded = 0
@@ -47,14 +54,19 @@ class Pipeline:
             loaded += len(result.records)
         sunk = {r.model_dump_json() for r in result.records}
 
-        root = getattr(self.healer.store, "root", None)
+        root = getattr(self.healer.store, "root", None) if self.healer.persist else None
         remaining = 0
         if root is not None:
             quarantine = Quarantine(Path(root))
             released = replay(quarantine, self.healer, self.model, remove=False)
             if released.released:
                 # Records the fetch re-served were already delivered this run.
-                fresh = [r for r in released.released if r.model_dump_json() not in sunk]
+                fresh = []
+                for r in released.released:
+                    dump = r.model_dump_json()
+                    if dump not in sunk:
+                        sunk.add(dump)
+                        fresh.append(r)
                 if fresh:
                     self.sink(fresh)  # remove only after the sink accepted them
                     loaded += len(fresh)

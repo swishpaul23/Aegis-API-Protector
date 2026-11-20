@@ -120,3 +120,37 @@ def test_example_script_imports():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert hasattr(module, "main")
+
+
+def test_repeated_failed_runs_share_one_batch(tmp_path):
+    store = FileStore(tmp_path / ".aegis")
+    healer = Healer(store=store, proposer=None)
+    first = healer.validate([V2], User)
+    second = healer.validate([V2], User)
+    assert first.status == second.status == "failed"
+    (batch,) = Quarantine(store.root).list()
+    assert second.quarantine_id == first.quarantine_id == batch.id
+    assert len(batch.records) == 1
+
+
+def test_released_list_has_no_duplicates(tmp_path):
+    store = FileStore(tmp_path / ".aegis")
+    quarantine = Quarantine(store.root)
+    quarantine.add("fixtures.models.User", [V1], "failed", None)
+    quarantine.add("fixtures.models.User", [V1], "pending", 9)  # legacy duplicate batches
+    sunk: list = []
+    run = Pipeline(lambda: [], User, sunk.extend, healer=Healer(store=store, proposer=None)).run()
+    assert len(sunk) == 1 and run.loaded == 1
+    assert quarantine.list() == []
+
+
+def test_no_replay_when_not_persisting(tmp_path):
+    store = FileStore(tmp_path / ".aegis")
+    Quarantine(store.root).add("fixtures.models.User", [V1], "failed", None)
+    sunk: list = []
+    pipe = Pipeline(
+        lambda: [], User, sunk.extend, healer=Healer(store=store, proposer=None, persist=False)
+    )
+    run = pipe.run()
+    assert sunk == [] and run.loaded == 0
+    assert len(Quarantine(store.root).list()) == 1

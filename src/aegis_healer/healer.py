@@ -232,15 +232,9 @@ class Healer:
             return
         try:
             # The reason is the status only: payload values must never leak into it.
-            quarantine = Quarantine(root)
-            if result.pending_id is not None:
-                result.quarantine_id = quarantine.add_or_merge(
-                    model_key(model), failing, result.status, result.pending_id
-                )
-            else:
-                result.quarantine_id = quarantine.add(
-                    model_key(model), failing, result.status, result.pending_id
-                )
+            result.quarantine_id = Quarantine(root).add_or_merge(
+                model_key(model), failing, result.status, result.pending_id
+            )
         except (
             OSError,
             ValueError,

@@ -93,10 +93,12 @@ class Quarantine:
         return batch_id
 
     def add_or_merge(
-        self, model_key: str, records: list[dict[str, Any]], reason: str, pending_id: int
+        self, model_key: str, records: list[dict[str, Any]], reason: str, pending_id: int | None
     ) -> str:
         """Merge into this pending fix's batch (skipping duplicates), else create a batch."""
-        existing = [b for b in self.list(model_key) if b.pending_id == pending_id]
+        existing = [
+            b for b in self.list(model_key) if b.pending_id == pending_id and b.reason == reason
+        ]
         if not existing:
             return self.add(model_key, records, reason, pending_id)
         batch = existing[0]

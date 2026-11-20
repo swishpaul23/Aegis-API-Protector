@@ -1,5 +1,6 @@
 """Self-healing ingestion: fetch -> heal -> load into SQLite -> quarantine until approved."""
 
+import contextlib
 import os
 import sqlite3
 import sys
@@ -23,7 +24,7 @@ def fetch():
 
 
 def sink(records):
-    with sqlite3.connect(DB) as db:
+    with contextlib.closing(sqlite3.connect(DB)) as db, db:  # db: commit or roll back
         db.execute(
             "CREATE TABLE IF NOT EXISTS profiles "
             "(user_id TEXT PRIMARY KEY, email_address TEXT, full_name TEXT, payload TEXT)"
@@ -33,8 +34,6 @@ def sink(records):
             "(user_id, email_address, full_name, payload) VALUES (?, ?, ?, ?)",
             [(str(r.user_id), r.email_address, r.full_name, r.model_dump_json()) for r in records],
         )
-    # sqlite3's context manager commits but does not close the connection
-    db.close()
 
 
 def main():
