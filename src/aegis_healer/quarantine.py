@@ -92,6 +92,29 @@ class Quarantine:
         )
         return batch_id
 
+    def add_or_merge(
+        self, model_key: str, records: list[dict[str, Any]], reason: str, pending_id: int
+    ) -> str:
+        """Merge into this pending fix's batch (skipping duplicates), else create a batch."""
+        existing = [b for b in self.list(model_key) if b.pending_id == pending_id]
+        if not existing:
+            return self.add(model_key, records, reason, pending_id)
+        batch = existing[0]
+        seen = {json.dumps(r, sort_keys=True) for r in batch.records}
+        fresh = []
+        for record in records:
+            fingerprint = json.dumps(record, sort_keys=True)
+            if fingerprint not in seen:
+                seen.add(fingerprint)
+                fresh.append(record)
+        if fresh:
+            batch.records = batch.records + fresh
+            atomic_write(
+                self.dir / f"{batch.id}.json",
+                json.dumps(batch.model_dump(mode="json"), indent=2, default=str) + "\n",
+            )
+        return batch.id
+
     def load(self, batch_id: str) -> QuarantineBatch:
         path = self.dir / f"{_check_id(batch_id)}.json"
         try:

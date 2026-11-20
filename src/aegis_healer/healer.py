@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from typing import Any, Literal
@@ -50,6 +51,7 @@ class HealResult(BaseModel):
     message: str = ""
     usage: Usage = Field(default_factory=Usage)
     quarantine_id: str | None = None
+    pending_is_new: bool = False  # internal: False when an existing pending fix was reused
 
     def raise_for_status(self) -> HealResult:
         if self.status not in ("ok", "healed"):
@@ -70,6 +72,19 @@ def _rebase(new: list[FieldMapping], current: list[FieldMapping]) -> list[FieldM
             m = m.model_copy(update={"source": [renamed.get(s, s) for s in m.source]})
         out.append(m)
     return out
+
+
+def _mapping_sig(mappings: list[FieldMapping]) -> frozenset[tuple]:
+    return frozenset(
+        (
+            m.target,
+            tuple(m.sources),
+            m.transform,
+            json.dumps(m.value_map, sort_keys=True),
+            m.separator,
+        )
+        for m in mappings
+    )
 
 
 def _signature(report: DriftReport) -> tuple:
@@ -158,6 +173,17 @@ class Healer:
         except (ValueError, KeyError):
             return raw
 
+    def _pending_for(
+        self, key: str, proposed: MappingPatch, report: DriftReport | None
+    ) -> tuple[int, bool]:
+        """Reuse an identical open pending fix (same base version and mappings) if any."""
+        base_version = self.store.active_version(key)
+        wanted = _mapping_sig(proposed.mappings)
+        for item in self.store.list_pending(key):
+            if item.base_version == base_version and _mapping_sig(item.patch.mappings) == wanted:
+                return item.id, False
+        return self.store.add_pending(key, proposed, report), True
+
     # ── main entry point ────────────────────────────────────
     def validate(
         self,
@@ -169,7 +195,7 @@ class Healer:
         if self.persist:
             self._quarantine(model, result, failing)
             self._log_run(model, result, count)
-        if result.status == "pending":
+        if result.status == "pending" and result.pending_is_new:
             self._notify(model, result, len(failing) if result.quarantine_id else 0)
         return result
 
@@ -206,9 +232,15 @@ class Healer:
             return
         try:
             # The reason is the status only: payload values must never leak into it.
-            result.quarantine_id = Quarantine(root).add(
-                model_key(model), failing, result.status, result.pending_id
-            )
+            quarantine = Quarantine(root)
+            if result.pending_id is not None:
+                result.quarantine_id = quarantine.add_or_merge(
+                    model_key(model), failing, result.status, result.pending_id
+                )
+            else:
+                result.quarantine_id = quarantine.add(
+                    model_key(model), failing, result.status, result.pending_id
+                )
         except (
             OSError,
             ValueError,
@@ -403,7 +435,9 @@ class Healer:
             )
 
         # Pending fixes don't store payload samples: .aegis/ is meant to be committed.
-        pending_id = self.store.add_pending(key, proposed, first_report) if self.persist else None
+        pending_id, is_new = (
+            self._pending_for(key, proposed, first_report) if self.persist else (None, False)
+        )
         why = (
             f"{len(still_failing)} record(s) still fail with this fix"
             if still_failing
@@ -411,5 +445,6 @@ class Healer:
         )
         base.status = "pending"
         base.pending_id = pending_id
+        base.pending_is_new = is_new
         base.message = f"Fix needs review ({why})."
         return base

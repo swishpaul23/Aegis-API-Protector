@@ -189,7 +189,10 @@ def test_interactive_review_continues_after_stale_fix(env):
     store, state = env
     state.update(payload=V2, patch=v2_agent_patch(0.8))
     run("check", "http://x", "--model", MODEL)
-    run("check", "http://x", "--model", MODEL)  # second pending fix for the same model
+    first = store.get_pending(1)
+    # An identical re-run is de-duplicated, so add a different fix on the same base version.
+    other = first.patch.model_copy(update={"mappings": first.patch.mappings[:2]})
+    store.add_pending(first.model_key, other, first.report)
     r = run("review", *_db(store), input="a\na\n")
     assert "stale" in r.output
     assert store.get_pending(1).status == "approved"
