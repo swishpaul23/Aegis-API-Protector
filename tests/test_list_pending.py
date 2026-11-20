@@ -56,3 +56,37 @@ def test_workflow_heredoc_matches_script(tmp_path):
         [sys.executable, str(SCRIPT)], cwd=tmp_path, capture_output=True, text=True, env=env
     ).stdout
     assert heredoc == script == "1\nx7\n"
+
+
+def _workflow():
+    yaml = pytest.importorskip("yaml")
+    wf = yaml.safe_load((SCRIPT.parent / "aegis-drift.yml").read_text(encoding="utf-8"))
+    return {s.get("name", ""): s for s in wf["jobs"]["check"]["steps"]}
+
+
+def test_workflow_install_requires_pip_spec():
+    step = _workflow()["Install Aegis"]
+    assert step["env"]["AEGIS_PIP_SPEC"] == "${{ vars.AEGIS_PIP_SPEC }}"
+    assert "'aegis-healer'" not in json.dumps(step)
+    assert 'if [ -z "$AEGIS_PIP_SPEC" ]' in step["run"] and "exit 1" in step["run"]
+
+
+def test_workflow_gate_and_url_secret():
+    steps = _workflow()
+    assert 'startswith("aegis/")' in steps["Skip while an Aegis PR is open"]["run"]
+    url = steps["Check for drift"]["env"]["AEGIS_URL"]
+    assert url == "${{ secrets.AEGIS_URL || vars.AEGIS_URL }}"
+
+
+def test_workflow_run_blocks_parse_with_bash(tmp_path):
+    import shutil
+    import subprocess
+
+    if not shutil.which("bash"):
+        pytest.skip("bash not available")
+    for name, step in _workflow().items():
+        if "run" in step:
+            script = tmp_path / "step.sh"
+            script.write_text(step["run"], encoding="utf-8")
+            res = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
+            assert res.returncode == 0, (name, res.stderr)

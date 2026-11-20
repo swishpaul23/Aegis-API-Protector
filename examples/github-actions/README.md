@@ -7,14 +7,19 @@ closing means "not this fix"** (see below).
 ## Setup
 
 1. Copy `aegis-drift.yml` to `.github/workflows/aegis-drift.yml`.
-2. Repository **Secrets**: `ANTHROPIC_API_KEY` (see the main README to get one). Without
-   it Aegis runs rules-only.
+2. Repository **Secrets**:
+   - `ANTHROPIC_API_KEY` (see the main README to get one). Without it Aegis runs rules-only.
+   - `AEGIS_URL`: the API endpoint, **as a Secret if it contains a key** (e.g.
+     `?api_key=...`). The workflow reads `secrets.AEGIS_URL` first and falls back to the
+     `AEGIS_URL` Variable for public URLs. Aegis never prints query strings.
 3. Repository **Variables**:
-   - `AEGIS_URL`: the API endpoint. Treat it as sensitive if it contains a key; it is only
-     passed through `env:` and never printed (Aegis also hides query strings in output).
    - `AEGIS_MODEL_SPEC`: your model as `module:Class`, e.g. `app.models:User`.
-   - `AEGIS_PIP_SPEC` (until the package is published): e.g.
-     `aegis-healer @ git+https://github.com/<owner>/<repo>`. Defaults to `aegis-healer`.
+   - `AEGIS_PIP_SPEC` (**required**, no default): what to `pip install`. Until the package is
+     published, a git URL pinned to a tag or commit, e.g.
+     `aegis-healer @ git+https://github.com/<owner>/<repo>@<tag-or-commit-sha>`. After
+     publishing, pin the version: `aegis-healer==X.Y.Z`. The install step fails with a
+     clear error when it is empty: installing an unpinned or unregistered name in a job that
+     holds your secrets would run whatever package claims that name.
 4. Settings, Actions, General: allow "Read and write permissions" and "Allow GitHub Actions
    to create and approve pull requests".
 5. Commit your `.aegis/` folder so the workflow has the current mappings. `.aegis/quarantine/`
@@ -39,12 +44,19 @@ If your model needs installed dependencies, add a step before the check, e.g.
 Closing means "not this fix". It does not remember the decision: the next scheduled run
 proposes again (new agent calls, new PR) unless you change your model, the API drift
 resolves, or you set the repository variable `AEGIS_PAUSED=true` (stops all runs).
-While a review PR (branch `aegis/review-*`) is open, new runs are skipped, so close or
-merge it to resume. Runs are serialized (`concurrency`) and time out after 15 minutes.
+While any Aegis PR (branch `aegis/*`, auto-applied or review) is open, new runs are skipped,
+so close or merge it to resume. Runs are serialized (`concurrency`) and time out after 15 minutes.
 
 The PR body contains the `aegis check` output.
 
 ## Notes
+
+- `AEGIS_WEBHOOK_URL` (a Secret) is read by the `aegis` CLI, so it works here; add it to the
+  check step's `env:` if you want pings. Python `Pipeline` users pass
+  `Healer(on_pending=webhook_notifier(url))` instead.
+- Single writer: if a `Pipeline` host also uses this repository's `.aegis/`, pull merged
+  approvals before each Pipeline run and don't let both write mappings at once (the PR flow
+  can go stale against changes it didn't see).
 
 - `runs.jsonl` is a local audit log: commit it if you like, but the workflow deliberately
   doesn't stage it (it changes every run and would open a PR each time). The workflow stages

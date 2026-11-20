@@ -27,29 +27,37 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Skip while a review PR is open
+      - name: Skip while an Aegis PR is open
         id: gate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          open_reviews=$(gh pr list --state open --limit 200 --json headRefName --jq '[.[] | select(.headRefName | startswith("aegis/review-"))] | length')
-          if [ "$open_reviews" != "0" ]; then
-            echo "::notice::An Aegis review PR is still open; skipping this run."
+          # Any open aegis/* PR (auto-applied or review) means .aegis on main is behind.
+          open_prs=$(gh pr list --state open --limit 200 --json headRefName --jq '[.[] | select(.headRefName | startswith("aegis/"))] | length')
+          if [ "$open_prs" != "0" ]; then
+            echo "::notice::An Aegis PR is still open; skipping this run."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install Aegis
         if: steps.gate.outputs.skip != 'true'
         env:
-          AEGIS_PIP_SPEC: ${{ vars.AEGIS_PIP_SPEC || 'aegis-healer' }}
-        run: pip install "$AEGIS_PIP_SPEC"
+          AEGIS_PIP_SPEC: ${{ vars.AEGIS_PIP_SPEC }}
+        run: |
+          # No default: an unpinned name could resolve to someone else's package in a job with secrets.
+          if [ -z "$AEGIS_PIP_SPEC" ]; then
+            echo "::error::Set the AEGIS_PIP_SPEC repository variable (a git URL pinned to a tag or commit, or aegis-healer==X.Y.Z once published)."
+            exit 1
+          fi
+          pip install "$AEGIS_PIP_SPEC"
 
       - name: Check for drift
         id: check
         if: steps.gate.outputs.skip != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          AEGIS_URL: ${{ vars.AEGIS_URL }}
+          # Prefer a Secret when the URL contains a key; a Variable works for public URLs.
+          AEGIS_URL: ${{ secrets.AEGIS_URL || vars.AEGIS_URL }}
           AEGIS_MODEL_SPEC: ${{ vars.AEGIS_MODEL_SPEC }}
         run: |
           set +e

@@ -11,7 +11,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "demo"))
 from models import UserProfile  # noqa: E402
 
-from aegis_healer import Pipeline  # noqa: E402
+from aegis_healer import Healer, Pipeline  # noqa: E402
 
 URL = os.environ.get("AEGIS_URL", "http://localhost:8000/v2.json")
 DB = "pipeline.db"  # created in the current working directory
@@ -37,7 +37,8 @@ def sink(records):
 
 
 def main():
-    run = Pipeline(fetch, UserProfile, sink).run()
+    # 1.0: every agent fix waits for `aegis review` (rule-based fixes still apply on their own).
+    run = Pipeline(fetch, UserProfile, sink, healer=Healer(auto_apply_threshold=1.0)).run()
     print(f"status:      {run.status}")
     print(f"loaded:      {run.loaded}")
     print(f"quarantined: {run.quarantined}")

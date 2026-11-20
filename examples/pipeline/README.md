@@ -24,9 +24,11 @@ everything from `examples\pipeline` so `.aegis\` and `pipeline.db` land there.
    python run_pipeline.py
    ```
 
-   Valid records are loaded. Records that need a low-confidence fix are quarantined under
-   `.aegis\quarantine\` and the output shows a `pending_id`. Running it again does not create
-   a second pending fix or duplicate quarantined records.
+   Valid records are loaded. The script uses `Healer(auto_apply_threshold=1.0)`, so every
+   agent fix waits for your review (otherwise a confident fix would apply on its own and
+   there would be nothing to approve). Records that need the fix are quarantined under
+   `.aegis\quarantine\` and the output shows a `pending_id`. Running it again reuses the
+   pending fix: no new agent calls, no second pending fix, no duplicate quarantined records.
 
 4. Review and approve the fix:
 
@@ -35,13 +37,21 @@ everything from `examples\pipeline` so `.aegis\` and `pipeline.db` land there.
    ```
 
 5. Run it again. The approved mappings are applied, the quarantined records are released into
-   the sink, and the quarantine batch is deleted only after the insert succeeded:
+   the sink, and the quarantine batch is deleted only after the insert succeeded. If some
+   records still fail with the approved fix, only those stay in the batch:
 
    ```powershell
    python run_pipeline.py
    ```
 
 Point at another API with `$env:AEGIS_URL = "http://localhost:8000/v1.json"`.
+
+Notifications: `AEGIS_WEBHOOK_URL` is read by the `aegis` CLI only. In a script, pass
+`Healer(on_pending=webhook_notifier(url))` from `aegis_healer.notify`.
+
+Quarantined records are kept until they are replayed (no automatic purge yet); delete
+`.aegis\quarantine\` to discard them. Use one writer per `.aegis\`: if the GitHub PR flow
+also approves fixes for this folder, pull its merged changes before running the script.
 
 Sinks should be idempotent (upsert by key): an API may re-serve records that were already
 loaded or quarantined. This example uses `INSERT OR REPLACE` keyed on `user_id`.

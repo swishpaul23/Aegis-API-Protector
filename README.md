@@ -92,13 +92,20 @@ drift -> rules -> agent -> confidence >= threshold ?
 ```
 
 Each run fetches, heals, loads valid records, then replays quarantined records whose fix was
-approved since. Sinks must be idempotent because an API may re-serve records. See
+approved since. Sinks must be idempotent because an API may re-serve records. While a fix is
+pending, later runs reuse it (no new agent calls, no second pending fix). See
 `examples/pipeline`.
+
+Use one writer per `.aegis/` folder. If you also run the GitHub PR flow
+(`examples/github-actions`) against the same `.aegis/`, pull the merged approvals into the
+Pipeline host before its next run, and don't let both write mappings at the same time.
 
 ## Human review
 
 - **CLI**: `aegis review` (interactive), or `aegis review --approve ID` / `--reject ID`.
-- **Webhook**: set `AEGIS_WEBHOOK_URL` to get pinged when a fix goes pending (see Notifications).
+- **Webhook**: get pinged when a fix goes pending (see Notifications). `AEGIS_WEBHOOK_URL`
+  is read by the `aegis` CLI only; library and `Pipeline` users pass
+  `Healer(on_pending=webhook_notifier(url))`.
 - **Pull requests**: `examples/github-actions` runs `aegis check` on a schedule and opens a
   PR per fix. Merging the PR is the approval; closing it means "not this fix" (the next
   run proposes again unless you change the model or set `AEGIS_PAUSED=true`).
@@ -132,14 +139,22 @@ Messages are categorical (no API values) unless you use `--privacy full`.
 ## Quarantine & replay
 
 Records that can't be loaded yet are saved under `.aegis/quarantine/` (gitignored: it may
-hold PII). Once a fix is approved, `Pipeline.run()` replays them into your sink and deletes
-the batch only after the insert succeeded. `aegis replay --model models:User` previews
-what would be released without changing anything. With `--out FILE` it writes the released
-records to the file **and removes the cleared quarantine batches**.
+hold PII). Once a fix is approved, `Pipeline.run()` replays them into your sink and changes
+the quarantine only after the insert succeeded. Release is partial: every record that now
+validates is released; a batch with records that still fail (say, one value no mapping can
+fix) keeps just those records, under the same batch id.
+
+`aegis replay --model models:User` previews what would be released without changing
+anything. With `--out FILE` (a new file; existing files are never overwritten) it writes the
+released records, de-duplicated, **then removes cleared batches and shrinks partial ones**.
+
+Quarantined records are kept until they are replayed: there is no automatic purge yet. To
+discard them, delete `.aegis/quarantine/`.
 
 ## Notifications
 
-Set `AEGIS_WEBHOOK_URL` (https; http only for localhost) or pass
+For the `aegis` CLI, set `AEGIS_WEBHOOK_URL` (https; http only for localhost). In Python
+(`Healer`, `Pipeline`) the variable is not read: pass
 `Healer(on_pending=webhook_notifier(url))` (from `aegis_healer.notify`). The POST body is
 JSON with a `text` field, so Slack and Discord-style webhooks work. Redirects are never
 followed, and proxy and custom CA environment variables are ignored on purpose, so a
@@ -155,7 +170,8 @@ notification can't be rerouted.
 
 ## Writing your own Proposer
 
-Any object with `propose(request, check, budget=None)` and a `last_usage` (`Usage`) works:
+Any object with `propose(request, check, budget=None)` and a `last_usage` (`Usage`) works
+(an older `propose(request, check)` is still called, without the budget argument):
 return a patch that passed `check(patch)`, or raise `AgentError`. Honour `budget` (max LLM
 calls for this invocation) and set `last_usage` for each call, even when it raised, so
 the Healer can enforce the run budget. Pass it as `Healer(proposer=...)`.
