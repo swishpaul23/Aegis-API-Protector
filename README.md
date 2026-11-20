@@ -34,10 +34,12 @@ result.raise_for_status()
 
 ```bash
 aegis init   https://api.example.com/users --name User   # generate models.py from a live response
-aegis check  https://api.example.com/users --model models:User [--threshold 0.9] [-H "Authorization: Bearer ..."]
-aegis review                                              # approve / reject pending fixes
+aegis check  https://api.example.com/users --model models:User [--threshold 0.9] [-H "Authorization: Bearer ..."] [--privacy masked] [--max-llm-calls 10]
+aegis review [--approve ID] [--reject ID]                 # interactive by default
 aegis history models.User
 aegis rollback models.User 2
+aegis runs [--limit N]                                    # run log
+aegis replay --model models:User [--batch ID] [--out FILE]
 ```
 
 `aegis check` exits `0` (ok or healed), `1` (fix pending review) or `2` (failed), so it
@@ -62,6 +64,100 @@ detect → diff → rule matcher → (agent, only for what's left) → validate 
    every one is at or above `auto_apply_threshold` (default `0.9`; `1.0` means a human
    approves every agent fix). Everything else waits in `aegis review`.
 
+## Self-healing pipeline
+
+`Pipeline` wraps fetch, heal and load, and holds back records you can't load safely yet:
+
+```python
+from aegis_healer import Healer, Pipeline
+
+
+def fetch():
+    return httpx.get(URL).json()
+
+
+def sink(records):  # must be idempotent: upsert by key
+    ...
+
+
+run = Pipeline(fetch, User, sink, healer=Healer(), records_path="data").run()
+run.status, run.loaded, run.quarantined, run.pending_id
+```
+
+```
+drift -> rules -> agent -> confidence >= threshold ?
+    yes: apply -> sink
+    no:  pending fix + quarantine records + notify
+         -> human review (approve) -> replay quarantined records -> sink
+```
+
+Each run fetches, heals, loads valid records, then replays quarantined records whose fix was
+approved since. Sinks must be idempotent because an API may re-serve records. See
+`examples/pipeline`.
+
+## Human review
+
+- **CLI**: `aegis review` (interactive), or `aegis review --approve ID` / `--reject ID`.
+- **Webhook**: set `AEGIS_WEBHOOK_URL` to get pinged when a fix goes pending (see Notifications).
+- **Pull requests**: `examples/github-actions` runs `aegis check` on a schedule and opens a
+  PR per fix. Merging the PR is the approval; closing it is the rejection.
+
+## Privacy
+
+What the agent sees of your API data is set by `--privacy` / `Healer(privacy=)`:
+
+| Mode | Sent to the LLM |
+|---|---|
+| `full` | Real sample values |
+| `masked` (default) | Values replaced by shape-preserving placeholders |
+| `schema` | Field names and types only, no values |
+
+Residual risk in `masked`: short single-word values such as `"active"` and epoch-like
+numbers pass through by design, because the agent needs them to spot status flags and
+timestamps. For highly sensitive APIs use `--privacy schema`.
+
+## Budget and cost
+
+`--max-llm-calls` (default 10) / `Healer(max_llm_calls=)` caps agent calls per run.
+`HealResult.usage` (calls, tokens, est_cost_usd) is shown in the `aegis check` output.
+At Haiku 5.5's $0.10 / $0.50 per million input / output tokens, an agent call costs about
+$0.0005. The agent only runs when the rules can't fix the drift.
+
+## Run log
+
+Every check appends a line to `.aegis/runs.jsonl`; `aegis runs` shows recent runs.
+Messages are categorical (no API values) unless you use `--privacy full`.
+
+## Quarantine & replay
+
+Records that can't be loaded yet are saved under `.aegis/quarantine/` (gitignored: it may
+hold PII). Once a fix is approved, `Pipeline.run()` replays them into your sink and deletes
+the batch only after the insert succeeded. `aegis replay --model models:User` previews
+what would be released without changing anything; add `--out FILE` to export it.
+
+## Notifications
+
+Set `AEGIS_WEBHOOK_URL` (https; http only for localhost) or pass
+`Healer(on_pending=webhook_notifier(url))` (from `aegis_healer.notify`). The POST body is
+JSON with a `text` field, so Slack and Discord-style webhooks work. Redirects are never
+followed, and proxy and custom CA environment variables are ignored on purpose, so a
+notification can't be rerouted.
+
+## Get an Anthropic API key
+
+1. Open the Console at platform.claude.com and sign in.
+2. Settings, Billing: add credit.
+3. Workspaces: create a workspace named `aegis`, and set a Monthly limit.
+4. API Keys: Create key in that workspace. Copy it now; it is shown once and starts `sk-ant-`.
+5. Put it in `.env` (gitignored): `ANTHROPIC_API_KEY=sk-ant-...`
+
+## Writing your own Proposer
+
+Any object with `propose(request, check, budget=None)` and a `last_usage` (`Usage`) works:
+return a patch that passed `check(patch)`, or raise `AgentError`. Honour `budget` (max LLM
+calls for this invocation) and set `last_usage` for each call, even when it raised, so
+the Healer can enforce the run budget. Pass it as `Healer(proposer=...)`.
+
 ## Where fixes live
 
 ```
@@ -69,6 +165,8 @@ detect → diff → rule matcher → (agent, only for what's left) → validate 
   mappings/<model>.json          current mappings
   history/<model>/0001.json      every version, never edited
   pending/0001.json              fixes waiting for review
+  quarantine/                    held-back records (gitignored)
+  runs.jsonl                     run log
 ```
 
 Plain JSON, written atomically. Commit `.aegis/` to git and every mapping change becomes
@@ -135,7 +233,6 @@ The Phase 1 Docker/FastAPI/Postgres build is kept for reference in `legacy/phase
 
 ## Roadmap
 
-- GitHub Action that runs `aegis check` on a schedule and opens a PR with the fix
 - Meaning drift: same field name, different meaning (dollars → cents, UTC → local time)
 - Shared store backends (Postgres) and run-result sinks (Databricks Delta, S3 + Athena)
 
