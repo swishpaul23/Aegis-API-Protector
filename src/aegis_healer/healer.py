@@ -174,19 +174,20 @@ class Healer:
         return result
 
     def _notify(self, model: type[BaseModel], result: HealResult, quarantined: int) -> None:
-        if self.on_pending is None:
-            return
+        if self.on_pending is None or not self.persist:
+            return  # a dry run has nothing to review
         mappings = result.proposed.mappings if result.proposed else []
         agent_conf = [m.confidence for m in mappings if m.origin == "agent"]
         key = model_key(model)
+        fields = sorted({m.target for m in mappings})
         notice = PendingNotice(
             model_key=key,
             pending_id=result.pending_id,
-            fields=sorted({m.target for m in mappings}),
+            fields=fields,
             min_confidence=min(agent_conf) if agent_conf else None,
             quarantined=quarantined,
             # Fixed and value-free: result.message can contain payload text.
-            message=f"{len({m.target for m in mappings})} field fix(es) for {key} need review",
+            message=f"{len(fields)} field fix(es) for {key} need review",
         )
         try:
             self.on_pending(notice)

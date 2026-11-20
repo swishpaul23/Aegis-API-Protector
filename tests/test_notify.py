@@ -184,3 +184,51 @@ def test_cli_wires_webhook_from_env(monkeypatch, tmp_path):
     assert seen["on_pending"] is None
     assert "example.com" not in r.output
     assert "AEGIS_WEBHOOK_URL" in r.output
+
+
+def test_no_notification_when_not_persisting(tmp_path):
+    seen = []
+    healer = Healer(
+        store=FileStore(tmp_path / ".aegis"),
+        proposer=FakeProposer(v2_agent_patch(0.8)),
+        persist=False,
+        on_pending=seen.append,
+    )
+    assert healer.validate([V1, V2], User).status == "pending"
+    assert seen == []
+
+
+def test_cli_dry_run_does_not_notify(monkeypatch, tmp_path):
+    store = FileStore(tmp_path / ".aegis")
+    monkeypatch.setattr(check_mod, "fetch_json", lambda url, headers: [V1, V2])
+    calls = []
+    monkeypatch.setattr(check_mod, "webhook_notifier", lambda url: calls.append)
+
+    def build(threshold, db, persist=True, **kw):
+        return Healer(
+            store=store, proposer=FakeProposer(v2_agent_patch(0.8)), persist=persist, **kw
+        )
+
+    monkeypatch.setattr(check_mod, "build_healer", build)
+    monkeypatch.setenv("AEGIS_WEBHOOK_URL", URL)
+    r = CliRunner(env={"COLUMNS": "200"}).invoke(
+        app, ["check", "http://x", "-m", "fixtures.models:User", "--dry-run"]
+    )
+    assert r.exit_code == 1, r.output
+    assert calls == []
+
+
+def test_webhook_client_ignores_env(monkeypatch):
+    from aegis_healer import notify
+
+    seen = {}
+    real = httpx.Client
+
+    def spy(**kw):
+        seen.update(kw)
+        return real(**kw)
+
+    monkeypatch.setattr(notify.httpx, "Client", spy)
+    webhook_notifier(URL, transport=httpx.MockTransport(lambda r: httpx.Response(200)))(notice())
+    assert seen["trust_env"] is False
+    assert seen["follow_redirects"] is False

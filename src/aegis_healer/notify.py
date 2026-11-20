@@ -61,7 +61,10 @@ def webhook_notifier(
         body = {"text": _text(notice), "aegis": notice.model_dump(mode="json")}
         try:
             with httpx.Client(
-                timeout=timeout, follow_redirects=False, transport=transport
+                timeout=timeout,
+                follow_redirects=False,
+                trust_env=False,  # no proxy/.netrc influence on the webhook request
+                transport=transport,
             ) as client:
                 response = client.post(url, json=body)
         except httpx.HTTPError as exc:
