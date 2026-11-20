@@ -2,6 +2,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).resolve().parent.parent / "examples" / "github-actions" / "list_pending.py"
 
 
@@ -34,8 +36,7 @@ def test_workflow_heredoc_matches_script(tmp_path):
     import subprocess
     import sys
 
-    import yaml
-
+    yaml = pytest.importorskip("yaml")
     wf = yaml.safe_load((SCRIPT.parent / "aegis-drift.yml").read_text(encoding="utf-8"))
     run = next(s["run"] for s in wf["jobs"]["check"]["steps"] if "<<'PY'" in s.get("run", ""))
     body = re.search(r"<<'PY'\n(.*?)\nPY\n", run, re.S).group(1)

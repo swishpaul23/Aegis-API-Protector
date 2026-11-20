@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          open_reviews=$(gh pr list --state open --json headRefName --jq '[.[] | select(.headRefName | startswith("aegis/review-"))] | length')
+          open_reviews=$(gh pr list --state open --limit 200 --json headRefName --jq '[.[] | select(.headRefName | startswith("aegis/review-"))] | length')
           if [ "$open_reviews" != "0" ]; then
             echo "::notice::An Aegis review PR is still open; skipping this run."
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -139,7 +139,7 @@ jobs:
           git push origin "$BRANCH"
           {
             echo "Aegis proposed a fix below the auto-apply confidence threshold."
-            echo "**Merging this PR approves the fix. Closing it rejects the fix.**"
+            echo "Merging approves this fix. Closing it means 'not this fix': the next scheduled run may propose again (set the AEGIS_PAUSED variable to true to stop)."
             echo
             echo '```'
             cat aegis-output.txt
