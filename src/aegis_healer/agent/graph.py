@@ -9,7 +9,7 @@ from typing import Any, Protocol, TypedDict
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 
-from aegis_healer.agent import ProposalRequest
+from aegis_healer.agent import AgentError, ProposalRequest
 from aegis_healer.agent.prompts import SYSTEM_PROMPT, render_request
 from aegis_healer.types import MappingPatch, PatchCheck
 
@@ -30,6 +30,9 @@ class _State(TypedDict):
 def scope_errors(req: ProposalRequest, patch: MappingPatch) -> list[str]:
     """Reject anything outside what the agent was asked to touch."""
     errors = []
+    for u in patch.unmappable:
+        if u.target not in req.unresolved:
+            errors.append(f"unmappable target '{u.target}' was not an unresolved field")
     for m in patch.mappings:
         if m.target not in req.unresolved:
             errors.append(f"target '{m.target}' was not an unresolved field")
@@ -69,16 +72,21 @@ class AgentProposer:
                 SystemMessage(SYSTEM_PROMPT),
                 HumanMessage(render_request(request, state["errors"] or None)),
             ]
-            raw = self.llm.invoke(messages)
-            patch = raw if isinstance(raw, MappingPatch) else MappingPatch.model_validate(raw)
+            attempts = state["attempts"] + 1
+            try:
+                raw = self.llm.invoke(messages)
+                patch = raw if isinstance(raw, MappingPatch) else MappingPatch.model_validate(raw)
+            except Exception as exc:  # malformed output or API error: retry with the error
+                return {"patch": None, "attempts": attempts, "errors": [_short(exc)], "ok": False}
             patch = MappingPatch(
                 mappings=[m.model_copy(update={"origin": "agent"}) for m in patch.mappings],
                 unmappable=patch.unmappable,
             )
-            return {"patch": patch, "attempts": state["attempts"] + 1}
+            return {"patch": patch, "attempts": attempts}
 
         def check_node(state: _State) -> dict[str, Any]:
-            assert state["patch"] is not None
+            if state["patch"] is None:
+                return {"ok": False}
             errors = scope_errors(request, state["patch"])
             if not errors:
                 errors = check(state["patch"]).errors
@@ -96,5 +104,12 @@ class AgentProposer:
         graph.add_edge("propose", "check")
         graph.add_conditional_edges("check", route)
         final = graph.compile().invoke({"attempts": 0, "patch": None, "errors": [], "ok": False})
-        assert final["patch"] is not None
+        if not final["ok"] or final["patch"] is None:
+            # Never hand back a patch that failed its own checks.
+            raise AgentError(final["errors"] or ["no valid proposal"])
         return final["patch"]
+
+
+def _short(exc: Exception) -> str:
+    text = f"{type(exc).__name__}: {exc}"
+    return text if len(text) <= 300 else text[:300] + "…"
