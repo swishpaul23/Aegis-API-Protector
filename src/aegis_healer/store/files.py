@@ -15,7 +15,7 @@ import re
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from aegis_healer.store import (
     MappingVersion,
@@ -23,7 +23,7 @@ from aegis_healer.store import (
     StalePatchError,
     merge,
 )
-from aegis_healer.types import DriftReport, FieldMapping, MappingPatch
+from aegis_healer.types import DriftReport, FieldMapping, MappingPatch, MeaningFinding
 
 _SAFE = re.compile(r"[^A-Za-z0-9_.-]")
 
@@ -158,6 +158,8 @@ class FileStore:
         patch: MappingPatch,
         report: DriftReport,
         samples: list[dict] | None = None,
+        kind: Literal["schema", "meaning"] = "schema",
+        findings: list[MeaningFinding] | None = None,
     ) -> int:
         pending_id = max(self._numbered(self.root / "pending"), default=0) + 1
         base_version = self.active_version(model_key)
@@ -169,6 +171,8 @@ class FileStore:
                 report=report,
                 samples=(samples or [])[:3],
                 base_version=base_version,
+                kind=kind,
+                findings=findings or [],
                 created_at=_now(),
             )
             if self._create(self._pending_path(pending_id), item.model_dump(mode="json")):
@@ -208,3 +212,13 @@ class FileStore:
         item.status = "approved" if approve else "rejected"
         self._write(self._pending_path(pending_id), item.model_dump(mode="json"))
         return version
+
+    def keep_pending(self, pending_id: int) -> None:
+        """Resolve a meaning fix by keeping the data. Touches no mappings."""
+        item = self.get_pending(pending_id)
+        if item.kind != "meaning":
+            raise ValueError(f"fix #{pending_id} is not a meaning fix")
+        if item.status != "pending":
+            raise ValueError(f"fix #{pending_id} is already {item.status}")
+        item.status = "kept"
+        self._write(self._pending_path(pending_id), item.model_dump(mode="json"))

@@ -11,6 +11,7 @@ from aegis_healer import Healer
 from aegis_healer.cli import app
 from aegis_healer.quarantine import Quarantine, replay
 from aegis_healer.store.files import FileStore
+from aegis_healer.types import DriftReport, MappingPatch
 
 runner = CliRunner(env={"COLUMNS": "200"})
 KEY = "fixtures.models.User"
@@ -317,6 +318,10 @@ def _mixed_batch(tmp_path):
     healed = Healer(store=store, proposer=FakeProposer(v2_agent_patch(0.95))).validate(V2, User)
     assert healed.status == "healed"
     bad = {**V2, "id": "abc"}
+    # replay only releases batches whose pending fix was resolved
+    pid = store.add_pending(KEY, MappingPatch(mappings=[]), DriftReport())
+    store.resolve_pending(pid, True)
+    assert pid == 1
     bid = q.add(KEY, [V2, {**V2, "id": "2"}, bad], "pending", 1)
     return store, q, bid, bad
 
@@ -383,7 +388,7 @@ def test_cli_replay_out_refuses_to_overwrite(tmp_path):
 def test_cli_replay_out_dedupes_across_batches(tmp_path):
     store = approved(tmp_path)
     q = Quarantine(store.root)
-    q.add(KEY, [V2], "pending", 99)  # the same record quarantined twice
+    q.add(KEY, [V2], "pending", 1)  # the same record quarantined twice
     out = tmp_path / "o.jsonl"
     r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
     assert r.exit_code == 0, r.output
