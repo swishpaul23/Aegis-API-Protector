@@ -288,3 +288,50 @@ def test_run_message_meaning_code():
 
 def test_meaning_finding_exported():
     assert MeaningFinding.__name__ == "MeaningFinding"
+
+
+def _cents_source_baseline(store, h, mult=100):
+    """Source sends cents; the active mapping scales them to dollars."""
+    store.save_active(K, [FieldMapping(source="amount", target="amount", scale=0.01)], "cents")
+    for run in range(4):
+        assert h.validate(batch(run, scale=mult), Payment).status == "ok"
+
+
+def test_scale_fix_removes_existing_scale_when_source_reverts(store):
+    h = healer(store)
+    _cents_source_baseline(store, h)
+    result = h.validate(batch(4, scale=1), Payment)  # source now sends dollars
+    assert result.status == "pending"
+    assert result.failed_records == 10
+    fix = store.get_pending(result.pending_id).patch.mappings
+    assert len(fix) == 1
+    assert (fix[0].source, fix[0].target, fix[0].scale) == ("amount", "amount", None)
+    store.resolve_pending(result.pending_id, True)
+    out = replay(Quarantine(store.root), h, Payment)
+    assert sorted(r.amount for r in out.released) == AMOUNTS
+
+
+def test_scale_fix_composes_with_existing_scale(store):
+    h = healer(store)
+    _cents_source_baseline(store, h)
+    result = h.validate(batch(4, scale=10000), Payment)  # hundredths of cents
+    fix = store.get_pending(result.pending_id).patch.mappings
+    assert fix[0].scale == 0.0001
+    store.resolve_pending(result.pending_id, True)
+    out = replay(Quarantine(store.root), h, Payment)
+    assert sorted(r.amount for r in out.released) == pytest.approx(AMOUNTS)
+
+
+def test_meaning_pending_never_reused_for_schema_drift(store):
+    from aegis_healer.types import DriftReport, MappingPatch
+
+    heal = FieldMapping(source="amt", target="amount")
+    meaning_id = store.add_pending(
+        K, MappingPatch(mappings=[heal]), DriftReport(), kind="meaning", findings=[]
+    )
+    h = healer(store)
+    raws = batch(0, amount_key="amt")[:5]
+    assert h._reusable_pending(K, [], [], ["amount"], raws, Payment) is None
+    pid, is_new = h._pending_for(K, MappingPatch(mappings=[heal]), DriftReport())
+    assert is_new and pid != meaning_id
+    assert store.get_pending(pid).kind == "schema"

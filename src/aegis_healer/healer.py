@@ -98,6 +98,12 @@ def _finding_sig(findings: list[MeaningFinding]) -> frozenset[tuple]:
     return frozenset((f.path, f.kind, f.suggested_scale) for f in findings)
 
 
+def _compose_scale(current: float | None, suggested: float) -> float | None:
+    """Scale that turns the raw value into the baseline scale; None when it cancels out."""
+    scale = float(f"{(current or 1.0) * suggested:.12g}")
+    return None if abs(scale - 1.0) < 1e-9 else scale
+
+
 def _usable(record: dict[str, Any], path: str) -> bool:
     try:
         return classify(get_path(record, path))[0] != "skip"
@@ -412,13 +418,15 @@ class Healer:
             if f.suggested_scale is None:
                 continue
             current = next((m for m in in_effect if m.target == f.path), None)
+            # detect saw mapped values: the suggestion is relative to the current output.
             update = {
-                "scale": f.suggested_scale,
+                "scale": _compose_scale(current.scale if current else None, f.suggested_scale),
                 "origin": "deterministic",
                 "confidence": 1.0,
                 "reason": f.detail,
             }
             if current is not None:
+                # Kept even as a plain identity: approval must replace the old scaled mapping.
                 fixes.append(current.model_copy(update=update))
             else:
                 fixes += _rebase([FieldMapping(source=f.path, target=f.path, **update)], in_effect)
@@ -427,6 +435,7 @@ class Healer:
             self._meaning_pending_for(key, proposed, findings) if self.persist else (None, False)
         )
         result.records = kept
+        result.failed_records = len(blocked)
         result.status = "pending"
         result.findings = findings
         result.proposed = proposed
