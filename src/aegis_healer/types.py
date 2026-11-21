@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -43,6 +44,7 @@ class FieldMapping(BaseModel):
     transform: Transform = "none"
     value_map: dict[str, Scalar] | None = None
     separator: str = " "
+    scale: float | None = None
     origin: Origin = "deterministic"
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     reason: str = ""
@@ -56,6 +58,8 @@ class FieldMapping(BaseModel):
             raise ValueError("only concat may take a list of sources")
         if self.transform == "value_map" and not self.value_map:
             raise ValueError("value_map transform needs a value_map")
+        if self.scale is not None and (not math.isfinite(self.scale) or self.scale == 0):
+            raise ValueError("scale must be finite and non-zero")
         return self
 
     @property

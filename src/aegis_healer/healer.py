@@ -83,6 +83,7 @@ def _mapping_sig(mappings: list[FieldMapping]) -> frozenset[tuple]:
             m.transform,
             json.dumps(m.value_map, sort_keys=True),
             m.separator,
+            m.scale,
         )
         for m in mappings
     )

@@ -86,8 +86,24 @@ def apply_transform(value: Any, transform: Transform | str) -> Any:
     return fn(value)
 
 
+def _apply_scale(value: Any, scale: float) -> int | float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError("scale needs a number")
+    result = value * scale
+    if isinstance(value, int) and isinstance(result, float) and result.is_integer():
+        return int(result)
+    return result
+
+
 def map_value(record: dict[str, Any], mapping: FieldMapping) -> Any:
     """Compute the target value for one mapping from a record. Raises KeyError/ValueError."""
+    value = _map_value(record, mapping)
+    if mapping.scale is not None:
+        value = _apply_scale(value, mapping.scale)
+    return value
+
+
+def _map_value(record: dict[str, Any], mapping: FieldMapping) -> Any:
     if mapping.transform == "concat":
         parts = [get_path(record, s) for s in mapping.sources]
         if not all(isinstance(p, str) for p in parts):
