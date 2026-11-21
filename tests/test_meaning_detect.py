@@ -35,7 +35,7 @@ def amounts_profile(n=60):
 
 @pytest.mark.parametrize(
     "factor,expected",
-    [(100, 0.01), (1000, 0.001), (0.001, 1000.0)],
+    [(100, 0.01), (1000, 0.001), (0.01, 100.0), (0.001, 1000.0)],
 )
 def test_scale_snapped(factor, expected):
     p = amounts_profile()
@@ -198,3 +198,13 @@ def test_findings_sorted_by_path_and_kind():
     ]
     out = detect(p, recs, M)
     assert [(f.path, f.kind) for f in out] == [("amount", "scale"), ("status", "category")]
+
+
+@pytest.mark.parametrize("seed", [11, 12, 13, 14, 15])
+@pytest.mark.parametrize("k", [2, 3, -2, -3])
+def test_scale_symmetry_across_seeds(seed, k):
+    p = base("amount", rng_amounts(60, seed=seed))
+    batch = [v * 10.0**k for v in rng_amounts(10, seed=seed + 100)]
+    (f,) = run(p, "amount", batch)
+    assert f.kind == "scale"
+    assert f.suggested_scale == 10.0**-k

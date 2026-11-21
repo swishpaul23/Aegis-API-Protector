@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import statistics
 from typing import Any
 
 from pydantic import BaseModel
@@ -38,7 +37,15 @@ def _scale(path: str, base: FieldProfile, numbers: list[float]) -> MeaningFindin
     base_bucket = median_bucket(base.numeric)
     if len(nonzero) < MIN_BATCH or base_bucket is None:
         return None
-    diff = statistics.median(math.log10(abs(v)) for v in nonzero) - base_bucket / BUCKETS_PER_DECADE
+    # Bucket the batch exactly like the baseline so quantisation bias cancels.
+    counts: dict[int, float] = {}
+    for v in nonzero:
+        b = round(math.log10(abs(v)) * BUCKETS_PER_DECADE)
+        counts[b] = counts.get(b, 0) + 1
+    batch_bucket = median_bucket(counts)
+    if batch_bucket is None:
+        return None
+    diff = (batch_bucket - base_bucket) / BUCKETS_PER_DECADE
     if abs(diff) < SCALE_TRIGGER:
         return None
     k = round(diff)
