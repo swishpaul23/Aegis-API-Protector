@@ -39,7 +39,7 @@ aegis review [--approve ID] [--reject ID] [--keep ID]     # interactive by defau
 aegis history models.User
 aegis rollback models.User 2
 aegis runs [--limit N]                                    # run log
-aegis replay --model models:User [--batch ID] [--out FILE]
+aegis replay --model models:User [--batch ID] [--out FILE] [--discard-dead]
 aegis profile models.User                                 # learned baseline per field
 ```
 
@@ -121,6 +121,13 @@ buckets, decimal places, timezone classes, short lowercase or uppercase category
 raw numbers, text, IDs or dates; stored in `.aegis/profiles/`, see `aegis profile MODEL_KEY`)
 and compares each new batch to it. No LLM is involved.
 
+What can end up in committed files: category words are any short all-lowercase or
+all-uppercase word (letters, `_`, `-`, at most 20 characters), so besides status codes like
+`active` or `USD`, a field of short usernames or codes could store some of them in
+`.aegis/profiles/` and in the findings of `.aegis/pending/` files. Set such fields to `off`
+(below) if that matters. Numeric strings such as `"12.50"` are treated as text: they are not
+scale-checked.
+
 It catches:
 
 - **Scale**: a number field about 100x or 1000x bigger or smaller (dollars/cents,
@@ -130,9 +137,16 @@ It catches:
 - **Category**: a category field that suddenly uses new values (`active` becomes `A`).
 
 A field needs 20 records of history before it is checked, and a batch needs 5 records.
-A run with findings never updates the baseline, so it can't learn the drift. The affected
-records are blocked and quarantined, and a pending fix is created (exit code 1). Meaning fixes
-are never auto-applied, whatever the threshold.
+Every run is checked, including runs whose schema fix is pending or failed: valid records
+with meaning drift are never loaded. The baseline only learns from fully healthy runs (no
+findings, status `ok` or `healed`), so it can't learn the drift. The affected records are
+blocked and quarantined in their own batch, and a pending meaning fix is created. On a
+schema-clean run the status becomes `pending` (exit code 1); on a run whose schema fix is
+pending or failed the status (and exit code) stays, `HealResult.meaning_pending_id` names the
+meaning fix and the message ends with `; meaning drift needs review: <fields>`. Meaning fixes
+are never auto-applied, whatever the threshold. If the API drifts in schema again before you
+decide, the new meaning fix for the same drift replaces the old one (marked `superseded`) and
+takes over its quarantined records, so one decision releases them all.
 
 Choose what happens per field in `.aegis/config.toml` (`block` is the default):
 
@@ -158,13 +172,17 @@ Resolve a meaning fix in `aegis review`:
 - **[k]eep data** (or `aegis review --keep ID`): the new values are the new normal. The
   baseline for the field is reset and rebuilds from the next runs; the blocked records can
   then be replayed as they are. Use this when the API really changed and your model expects it.
-- **[r]eject** or **[s]kip** as for any fix. Blocked records stay quarantined.
+- **[r]eject**: the blocked records are never released; their batch becomes dead. Delete it
+  with `aegis replay --model ... --discard-dead`.
+- **[s]kip**: decide later. Blocked records stay quarantined.
 
 Known limitations:
 
 - Timezone and category drift have no automatic fix: keep the data, or fix it upstream.
 - A field needs 20 records of history before it is checked.
-- Records quarantined for *schema* drift are not meaning-checked when replayed after approval.
+- Records are meaning-checked when a run first sees them. Only records quarantined for
+  *schema* drift and later released by replay (after the schema fix is approved) skip the
+  check: replay re-validates them against the mappings, not against the baseline.
 - Small batches (5 records) against a very wide baseline can occasionally false-alarm; set
   noisy fields to `flag` or `off`.
 
@@ -199,17 +217,28 @@ Messages are categorical (no API values) unless you use `--privacy full`.
 ## Quarantine & replay
 
 Records that can't be loaded yet are saved under `.aegis/quarantine/` (gitignored: it may
-hold PII). Once a fix is approved, `Pipeline.run()` replays them into your sink and changes
-the quarantine only after the insert succeeded. Release is partial: every record that now
-validates is released; a batch with records that still fail (say, one value no mapping can
-fix) keeps just those records, under the same batch id.
+hold PII), in two kinds of batch:
+
+- **Schema** batches hold records that failed validation. Replay releases every record that
+  validates with the current mappings, whatever happened to the fix (approved, rejected,
+  or a later fix that heals them).
+- **Meaning** batches hold records that validated but whose values changed meaning. They
+  wait on their meaning fix: released only once it is approved or kept; still blocked while
+  it is pending (or missing). A batch of a rejected meaning fix is **dead**: replay skips it
+  and doesn't count it as blocked; delete it with `aegis replay --discard-dead`.
+
+`Pipeline.run()` replays them into your sink and changes the quarantine only after the
+insert succeeded. Release is partial: every record that now validates is released; a batch
+with records that still fail (say, one value no mapping can fix) keeps just those records,
+under the same batch id.
 
 `aegis replay --model models:User` previews what would be released without changing
 anything. With `--out FILE` (a new file; existing files are never overwritten) it writes the
 released records, de-duplicated, **then removes cleared batches and shrinks partial ones**.
 
-Quarantined records are kept until they are replayed: there is no automatic purge yet. To
-discard them, delete `.aegis/quarantine/`.
+Quarantined records are kept until they are replayed: there is no automatic purge yet.
+`aegis replay --model ... --discard-dead` deletes dead meaning batches; to discard everything,
+delete `.aegis/quarantine/`.
 
 ## Notifications
 

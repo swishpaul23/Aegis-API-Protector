@@ -36,7 +36,13 @@ aegis replay --model models:Payment --out released.jsonl
 
 Try `[k]eep data` at step 3 instead (`aegis review --keep 1`): the baseline for `amount`
 resets, the cents values become the new normal after a couple of runs on `payments_v2.json`,
-and `aegis replay` releases the blocked records as they are. To skip the checks for one run,
-add `--no-meaning` to `aegis check`.
+and `aegis replay` releases the blocked records as they are. `[r]eject` instead means the
+blocked records are never released: their batch becomes dead, and
+`aegis replay --model models:Payment --discard-dead` deletes it. To skip the checks for one
+run, add `--no-meaning` to `aegis check`.
+
+`.aegis/profiles/` and the findings in `.aegis/pending/` may hold short all-lowercase or
+all-uppercase words seen in category-like fields (here `usd`); numeric strings such as
+`"12.50"` count as text and are not scale-checked.
 
 To start over, delete the state: `Remove-Item -Recurse -Force .aegis`
