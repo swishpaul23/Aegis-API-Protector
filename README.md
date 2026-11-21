@@ -5,7 +5,7 @@ automatically: plain rules first, a LangGraph agent (Claude Haiku) only for the 
 and a validation gate in front of everything.
 
 ```bash
-pip install aegis-healer      # once published; from a clone: pip install -e .
+pip install aegis-healer
 ```
 
 ## Why

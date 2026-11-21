@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aegis-healer"
-version = "0.1.0"
+version = "0.1.1"
 description = "Aegis | API Healer: detect API schema drift and repair it with rules first, a LangGraph agent second."
 readme = "README.md"
 license = "MIT"
@@ -28,6 +28,11 @@ dependencies = [
     "langchain-core>=1.2.5,<2",
 ]
 
+[project.urls]
+Homepage = "https://github.com/swishpaul23/Aegis-API-Protector"
+Source = "https://github.com/swishpaul23/Aegis-API-Protector"
+Issues = "https://github.com/swishpaul23/Aegis-API-Protector/issues"
+
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "build", "twine", "pyyaml"]
 
@@ -38,7 +43,7 @@ aegis = "aegis_healer.cli:app"
 packages = ["src/aegis_healer"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["legacy", ".aegis", ".env"]
+exclude = ["legacy", ".aegis", "**/.aegis", ".env", "examples/**/released.jsonl", ".superpowers"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

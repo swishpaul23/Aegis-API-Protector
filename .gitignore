@@ -14,4 +14,5 @@ pyvenv.cfg
 examples/demo/.aegis/
 examples/meaning/.aegis/
 examples/meaning/released.jsonl
+examples/demo/released.jsonl
 .superpowers/

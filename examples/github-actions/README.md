@@ -15,10 +15,8 @@ is never approved by the workflow: its PR asks you to decide on the branch befor
      `AEGIS_URL` Variable for public URLs. Aegis never prints query strings.
 3. Repository **Variables**:
    - `AEGIS_MODEL_SPEC`: your model as `module:Class`, e.g. `app.models:User`.
-   - `AEGIS_PIP_SPEC` (**required**, no default): what to `pip install`. Until the package is
-     published, a git URL pinned to a tag or commit, e.g.
-     `aegis-healer @ git+https://github.com/<owner>/<repo>@<tag-or-commit-sha>`. After
-     publishing, pin the version: `aegis-healer==X.Y.Z`. The install step fails with a
+   - `AEGIS_PIP_SPEC` (**required**, no default): what to `pip install`, pinned to a
+     version, e.g. `aegis-healer==0.1.1`. The install step fails with a
      clear error when it is empty: installing an unpinned or unregistered name in a job that
      holds your secrets would run whatever package claims that name.
 4. Settings, Actions, General: allow "Read and write permissions" and "Allow GitHub Actions
