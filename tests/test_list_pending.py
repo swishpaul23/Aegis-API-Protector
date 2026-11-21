@@ -25,7 +25,16 @@ def test_lists_only_pending_and_skips_corrupt(tmp_path):
     (root / "0005.json").write_text(json.dumps({"status": "pending"}), encoding="utf-8")
     (root / "0006.json").write_bytes(b"\xff\xfe\x00bad")
     (root / "0007.json").write_text(json.dumps({"id": 7, "status": "pending"}), encoding="utf-8")
-    assert _load().list_pending(str(root)) == ["1", "7"]
+    (root / "0008.json").write_text(
+        json.dumps({"id": 8, "status": "pending", "kind": "meaning"}), encoding="utf-8"
+    )
+    (root / "0009.json").write_text(
+        json.dumps({"id": 9, "status": "superseded", "kind": "meaning"}), encoding="utf-8"
+    )
+    (root / "0010.json").write_text(
+        json.dumps({"id": 10, "status": "pending", "kind": "bogus kind"}), encoding="utf-8"
+    )
+    assert _load().list_pending(str(root)) == ["1 schema", "7 schema", "8 meaning"]
 
 
 def test_missing_dir_is_empty(tmp_path):
@@ -49,6 +58,15 @@ def test_workflow_heredoc_matches_script(tmp_path):
     (root / "0004.json").write_bytes(b"\xff\xfe")
     (root / "0005.json").write_text(json.dumps({"status": "pending"}), encoding="utf-8")
     (root / "0006.json").write_text(json.dumps({"id": "x7", "status": "pending"}), encoding="utf-8")
+    (root / "0007.json").write_text(
+        json.dumps({"id": 7, "status": "pending", "kind": "meaning"}), encoding="utf-8"
+    )
+    (root / "0008.json").write_text(
+        json.dumps({"id": 8, "status": "superseded", "kind": "meaning"}), encoding="utf-8"
+    )
+    (root / "0009.json").write_text(
+        json.dumps({"id": 9, "status": "pending", "kind": "x; rm"}), encoding="utf-8"
+    )
     env = {"PYTHONIOENCODING": "utf-8"}
     heredoc = subprocess.run(
         [sys.executable, "-c", body], cwd=tmp_path, capture_output=True, text=True, env=env
@@ -56,7 +74,7 @@ def test_workflow_heredoc_matches_script(tmp_path):
     script = subprocess.run(
         [sys.executable, str(SCRIPT)], cwd=tmp_path, capture_output=True, text=True, env=env
     ).stdout
-    assert heredoc == script == "1\nx7\n"
+    assert heredoc == script == "1 schema\nx7 schema\n7 meaning\n"
 
 
 def _workflow():
@@ -92,3 +110,21 @@ def test_workflow_run_blocks_parse_with_bash(tmp_path):
             script.write_text(step["run"], encoding="utf-8")
             res = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
             assert res.returncode == 0, (name, res.stderr)
+
+
+def test_workflow_never_commits_profiles():
+    """CI reads the committed baseline but never updates it (final review #2)."""
+    for step in _workflow().values():
+        for line in step.get("run", "").splitlines():
+            if line.strip().startswith("git add"):
+                assert ".aegis/profiles" not in line, line
+
+
+def test_workflow_approves_only_schema_fixes():
+    run = _workflow()["Open PRs for fixes that need review"]["run"]
+    assert "while read -r id kind" in run
+    assert 'if [ "$kind" = "schema" ]' in run
+    approve = [line for line in run.splitlines() if "aegis review --approve" in line]
+    assert len(approve) == 1
+    assert "Meaning drift fix #" in run and "needs a decision" in run
+    assert "aegis review" in run and "Closing the PR leaves it pending." in run

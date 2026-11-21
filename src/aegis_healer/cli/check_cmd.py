@@ -124,6 +124,11 @@ def check(
         console.print(f"[red]✗ Could not read records:[/red] {safe(error_text(exc))}")
         raise typer.Exit(2) from exc
 
+    if result.findings and result.applied:
+        # The schema half of a mixed run was saved: say so before the meaning findings.
+        console.print(mapping_table(result.applied))
+        verb = "found (dry run, not saved)" if dry_run else "saved"
+        console.print(f"[green]✓ Schema fix {verb}: {len(result.applied)} field(s)[/green]")
     if result.findings:
         console.print(findings_table(result.findings, title="Meaning drift"))
     if result.status == "ok":
@@ -134,7 +139,9 @@ def check(
             console.print(
                 f"Drift found: {len(r.missing)} missing, {len(r.type_mismatches)} type change(s)"
             )
-        if result.proposed and result.proposed.mappings and not result.findings:
+        # With findings on an ok/healed run, `proposed` is the meaning fix (shown above).
+        schema_proposal = not result.findings or result.schema_status in ("pending", "failed")
+        if result.proposed and result.proposed.mappings and schema_proposal:
             console.print(mapping_table(result.proposed.mappings))
         for u in result.proposed.unmappable if result.proposed else []:
             console.print(f"[red]✗ {safe(u.target)}[/red]: {safe(u.reason)}")

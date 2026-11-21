@@ -252,3 +252,30 @@ def test_profile_empty(env):
     r = run("profile", "models.Nothing")
     assert r.exit_code == 0, r.output
     assert "No profile for models.Nothing." in r.output
+
+
+def test_check_shows_auto_applied_schema_fix_with_meaning_drift(env):
+    """A run that saved a schema fix and found meaning drift says both (final review #7)."""
+    store, state = env
+    build_baseline(state)
+    rows = demo_json("payments_v2.json")
+    state["payload"] = [
+        {("paidAt" if k == "paid_at" else k): v for k, v in r.items()} for r in rows
+    ]
+    r = check()
+    assert r.exit_code == 1, r.output
+    assert store.active_version(KEY) == 1
+    assert "Schema fix saved: 1 field(s)" in r.output
+    assert "paidAt" in r.output  # the applied mapping table
+    assert r.output.index("Schema fix saved") < r.output.index("Meaning drift")
+
+
+def test_check_shows_schema_proposal_on_failed_run_with_meaning_drift(env):
+    store, state = env
+    build_baseline(state)
+    rows = demo_json("payments_v2.json")
+    state["payload"] = rows + [{**rows[0], "id": "not-a-number"}]
+    r = check()
+    assert r.exit_code == 2, r.output
+    assert "Meaning drift" in r.output
+    assert "meaning drift needs review: amount" in r.output
