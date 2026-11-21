@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from aegis_healer.cli.check_cmd import check
 from aegis_healer.cli.init_cmd import init
+from aegis_healer.cli.profile_cmd import profile
 from aegis_healer.cli.replay_cmd import replay
 from aegis_healer.cli.review_cmd import history, review, rollback
 from aegis_healer.cli.runs_cmd import runs
@@ -27,6 +28,7 @@ app.command()(rollback)
 app.command()(init)
 app.command()(runs)
 app.command()(replay)
+app.command()(profile)
 
 
 @app.callback()

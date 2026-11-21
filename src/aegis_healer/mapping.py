@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import copy
+import math
 from collections.abc import Callable
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from aegis_healer.paths import get_path, has_path, pop_path, set_path
@@ -86,8 +88,33 @@ def apply_transform(value: Any, transform: Transform | str) -> Any:
     return fn(value)
 
 
+def _apply_scale(value: Any, scale: float) -> int | float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError("scale needs a number")
+    try:
+        if not math.isfinite(value):
+            raise ValueError("value is not finite")
+        # Decimal on the shortest repr: 3480 * 0.01 is 34.8, not 34.800000000000004.
+        product = Decimal(repr(value)) * Decimal(repr(scale))
+        result = float(product)
+    except OverflowError:
+        raise ValueError("scaled value is not finite") from None
+    if not math.isfinite(result):
+        raise ValueError("scaled value is not finite")
+    if isinstance(value, int) and product == product.to_integral_value():
+        return int(product)
+    return result
+
+
 def map_value(record: dict[str, Any], mapping: FieldMapping) -> Any:
     """Compute the target value for one mapping from a record. Raises KeyError/ValueError."""
+    value = _map_value(record, mapping)
+    if mapping.scale is not None:
+        value = _apply_scale(value, mapping.scale)
+    return value
+
+
+def _map_value(record: dict[str, Any], mapping: FieldMapping) -> Any:
     if mapping.transform == "concat":
         parts = [get_path(record, s) for s in mapping.sources]
         if not all(isinstance(p, str) for p in parts):

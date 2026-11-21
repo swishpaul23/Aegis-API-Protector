@@ -14,6 +14,7 @@ from aegis_healer.cli.common import (
     error_text,
     fetch_error_text,
     fetch_json,
+    findings_table,
     get_store,
     load_model,
     mapping_table,
@@ -37,6 +38,7 @@ def build_healer(
     privacy: str = "masked",
     max_llm_calls: int | None = 10,
     on_pending: Callable[[PendingNotice], None] | None = None,
+    meaning: bool | None = None,
 ) -> Healer:
     """The single place the CLI builds a Healer (tests monkeypatch this)."""
     return Healer(
@@ -46,6 +48,7 @@ def build_healer(
         privacy=cast(Privacy, privacy),
         max_llm_calls=max_llm_calls,
         on_pending=on_pending,
+        meaning=meaning,
     )
 
 
@@ -80,6 +83,12 @@ def check(
     max_llm_calls: Annotated[
         int, typer.Option(min=0, help="Max LLM calls for this run (0 = rules only)")
     ] = 10,
+    no_meaning: Annotated[
+        bool,
+        typer.Option(
+            "--no-meaning", help="Skip the meaning-drift checks (scale, timezone, category)"
+        ),
+    ] = False,
 ) -> None:
     """Check an API against your model. Exit 0 ok/healed, 1 pending review, 2 failed."""
     if privacy not in PRIVACY_MODES:
@@ -105,6 +114,7 @@ def check(
         privacy=privacy,
         max_llm_calls=max_llm_calls,
         on_pending=_env_notifier(),
+        meaning=False if no_meaning else None,
     )
     if healer.proposer is None:
         console.print("[dim]Agent disabled (no ANTHROPIC_API_KEY): rules only.[/dim]")
@@ -114,6 +124,13 @@ def check(
         console.print(f"[red]✗ Could not read records:[/red] {safe(error_text(exc))}")
         raise typer.Exit(2) from exc
 
+    if result.findings and result.applied:
+        # The schema half of a mixed run was saved: say so before the meaning findings.
+        console.print(mapping_table(result.applied))
+        verb = "found (dry run, not saved)" if dry_run else "saved"
+        console.print(f"[green]✓ Schema fix {verb}: {len(result.applied)} field(s)[/green]")
+    if result.findings:
+        console.print(findings_table(result.findings, title="Meaning drift"))
     if result.status == "ok":
         console.print(f"[green]✓ No drift.[/green] {len(result.records)} record(s) valid.")
     else:
@@ -122,7 +139,9 @@ def check(
             console.print(
                 f"Drift found: {len(r.missing)} missing, {len(r.type_mismatches)} type change(s)"
             )
-        if result.proposed and result.proposed.mappings:
+        # With findings on an ok/healed run, `proposed` is the meaning fix (shown above).
+        schema_proposal = not result.findings or result.schema_status in ("pending", "failed")
+        if result.proposed and result.proposed.mappings and schema_proposal:
             console.print(mapping_table(result.proposed.mappings))
         for u in result.proposed.unmappable if result.proposed else []:
             console.print(f"[red]✗ {safe(u.target)}[/red]: {safe(u.reason)}")

@@ -2,7 +2,7 @@
 
 from aegis_healer.healer import DriftError, Healer, HealResult
 from aegis_healer.pipeline import Pipeline, PipelineRun
-from aegis_healer.types import FieldMapping, MappingPatch, Unmappable
+from aegis_healer.types import FieldMapping, MappingPatch, MeaningFinding, Unmappable
 
 __all__ = [
     "DriftError",
@@ -10,6 +10,7 @@ __all__ = [
     "HealResult",
     "Healer",
     "MappingPatch",
+    "MeaningFinding",
     "Pipeline",
     "PipelineRun",
     "Unmappable",

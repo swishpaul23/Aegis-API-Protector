@@ -87,7 +87,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: aegis/auto-${{ github.run_id }}
         run: |
-          # runs.jsonl is deliberately not staged: it changes on every run.
+          # runs.jsonl and profiles/ are deliberately not staged: they change on every run.
+          # CI reads the committed baseline (.aegis/profiles) but never updates it.
           git add .aegis/mappings .aegis/history
           if git diff --cached --quiet; then
             echo "No changes to .aegis; nothing to do."
@@ -121,8 +122,9 @@ jobs:
           for path in sorted(pathlib.Path(".aegis/pending").glob("*.json")):
               try:
                   data = json.loads(path.read_text(encoding="utf-8"))
-                  if data.get("status") == "pending":
-                      print(str(data["id"]))
+                  kind = data.get("kind", "schema")
+                  if data.get("status") == "pending" and kind in ("schema", "meaning"):
+                      print(f"{data['id']} {kind}")
               except (OSError, ValueError, AttributeError, KeyError):
                   continue
           PY
@@ -134,8 +136,16 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           title_ids=""
-          while IFS= read -r id; do
-            aegis review --approve "$id"
+          schema_ids=""
+          meaning_ids=""
+          while read -r id kind; do
+            if [ "$kind" = "schema" ]; then
+              aegis review --approve "$id"
+              schema_ids="${schema_ids:+$schema_ids }$id"
+            else
+              # Meaning fixes are never auto-approved: a human applies the fix or keeps the data.
+              meaning_ids="${meaning_ids:+$meaning_ids }$id"
+            fi
             title_ids="${title_ids:+$title_ids, }#$id"
           done < pending-ids.txt
           git add .aegis/pending .aegis/mappings .aegis/history
@@ -146,9 +156,15 @@ jobs:
           git commit -m "Aegis: fix needs review ($title_ids)"
           git push origin "$BRANCH"
           {
-            echo "Aegis proposed a fix below the auto-apply confidence threshold."
-            echo "Merging approves this fix. Closing it means 'not this fix': the next scheduled run may propose again (set the AEGIS_PAUSED variable to true to stop)."
-            echo
+            if [ -n "$schema_ids" ]; then
+              echo "Aegis proposed a schema fix below the auto-apply confidence threshold."
+              echo "Merging approves the schema fix. Closing it means 'not this fix': the next scheduled run may propose again (set the AEGIS_PAUSED variable to true to stop)."
+              echo
+            fi
+            for id in $meaning_ids; do
+              echo "Meaning drift fix #$id needs a decision: check out this branch, run \`aegis review\` (apply fix or keep data), commit \`.aegis/\`, push, then merge. Closing the PR leaves it pending."
+              echo
+            done
             echo '```'
             cat aegis-output.txt
             echo '```'

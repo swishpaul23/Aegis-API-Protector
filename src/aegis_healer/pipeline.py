@@ -72,7 +72,8 @@ class Pipeline:
                     loaded += len(fresh)
                 apply_replay(quarantine, released)  # logs a warning per failed batch
             key = model_key(self.model)
-            remaining = sum(len(b.records) for b in quarantine.list(key))
+            dead = set(released.dead_batches)
+            remaining = sum(len(b.records) for b in quarantine.list(key) if b.id not in dead)
         return PipelineRun(
             status=result.status,
             loaded=loaded,

@@ -1,0 +1,152 @@
+[
+  {
+    "id": 1000,
+    "amount": 1250,
+    "currency": "usd",
+    "paid_at": "2026-11-01T09:00:00Z"
+  },
+  {
+    "id": 1001,
+    "amount": 21137,
+    "currency": "usd",
+    "paid_at": "2026-11-02T10:13:00Z"
+  },
+  {
+    "id": 1002,
+    "amount": 9174,
+    "currency": "usd",
+    "paid_at": "2026-11-03T11:26:00Z"
+  },
+  {
+    "id": 1003,
+    "amount": 3010,
+    "currency": "usd",
+    "paid_at": "2026-11-04T12:39:00Z"
+  },
+  {
+    "id": 1004,
+    "amount": 35547,
+    "currency": "usd",
+    "paid_at": "2026-11-05T13:52:00Z"
+  },
+  {
+    "id": 1005,
+    "amount": 12685,
+    "currency": "usd",
+    "paid_at": "2026-11-06T14:05:00Z"
+  },
+  {
+    "id": 1006,
+    "amount": 5022,
+    "currency": "usd",
+    "paid_at": "2026-11-07T15:18:00Z"
+  },
+  {
+    "id": 1007,
+    "amount": 48000,
+    "currency": "usd",
+    "paid_at": "2026-11-08T16:31:00Z"
+  },
+  {
+    "id": 1008,
+    "amount": 16146,
+    "currency": "usd",
+    "paid_at": "2026-11-09T17:44:00Z"
+  },
+  {
+    "id": 1009,
+    "amount": 6208,
+    "currency": "usd",
+    "paid_at": "2026-11-10T09:57:00Z"
+  },
+  {
+    "id": 1010,
+    "amount": 1720,
+    "currency": "usd",
+    "paid_at": "2026-11-11T10:10:00Z"
+  },
+  {
+    "id": 1011,
+    "amount": 21607,
+    "currency": "usd",
+    "paid_at": "2026-11-12T11:23:00Z"
+  },
+  {
+    "id": 1012,
+    "amount": 9644,
+    "currency": "usd",
+    "paid_at": "2026-11-13T12:36:00Z"
+  },
+  {
+    "id": 1013,
+    "amount": 3480,
+    "currency": "usd",
+    "paid_at": "2026-11-14T13:49:00Z"
+  },
+  {
+    "id": 1014,
+    "amount": 35117,
+    "currency": "usd",
+    "paid_at": "2026-11-15T14:02:00Z"
+  },
+  {
+    "id": 1015,
+    "amount": 12255,
+    "currency": "usd",
+    "paid_at": "2026-11-16T15:15:00Z"
+  },
+  {
+    "id": 1016,
+    "amount": 4592,
+    "currency": "usd",
+    "paid_at": "2026-11-17T16:28:00Z"
+  },
+  {
+    "id": 1017,
+    "amount": 48000,
+    "currency": "usd",
+    "paid_at": "2026-11-18T17:41:00Z"
+  },
+  {
+    "id": 1018,
+    "amount": 16616,
+    "currency": "usd",
+    "paid_at": "2026-11-19T09:54:00Z"
+  },
+  {
+    "id": 1019,
+    "amount": 6678,
+    "currency": "usd",
+    "paid_at": "2026-11-20T10:07:00Z"
+  },
+  {
+    "id": 1020,
+    "amount": 1290,
+    "currency": "usd",
+    "paid_at": "2026-11-21T11:20:00Z"
+  },
+  {
+    "id": 1021,
+    "amount": 21177,
+    "currency": "usd",
+    "paid_at": "2026-11-22T12:33:00Z"
+  },
+  {
+    "id": 1022,
+    "amount": 9214,
+    "currency": "usd",
+    "paid_at": "2026-11-23T13:46:00Z"
+  },
+  {
+    "id": 1023,
+    "amount": 3050,
+    "currency": "usd",
+    "paid_at": "2026-11-24T14:59:00Z"
+  },
+  {
+    "id": 1024,
+    "amount": 35587,
+    "currency": "usd",
+    "paid_at": "2026-11-25T15:12:00Z"
+  }
+]

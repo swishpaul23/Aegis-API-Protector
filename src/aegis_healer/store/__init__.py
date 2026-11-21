@@ -9,7 +9,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field
 
-from aegis_healer.types import DriftReport, FieldMapping, MappingPatch
+from aegis_healer.types import DriftReport, FieldMapping, MappingPatch, MeaningFinding
 
 
 class MappingVersion(BaseModel):
@@ -26,8 +26,18 @@ class PendingPatch(BaseModel):
     report: DriftReport
     samples: list[dict] = Field(default_factory=list)
     base_version: int
-    status: Literal["pending", "approved", "rejected"] = "pending"
+    status: Literal["pending", "approved", "rejected", "kept", "superseded"] = "pending"
+    kind: Literal["schema", "meaning"] = "schema"
+    findings: list[MeaningFinding] = Field(default_factory=list)
+    superseded_by: int | None = None  # the newer meaning fix that replaced this one
     created_at: datetime
+
+
+def not_open(item: PendingPatch) -> str:
+    """Why a fix can't be resolved any more (value-free)."""
+    if item.status == "superseded" and item.superseded_by is not None:
+        return f"fix #{item.id} was superseded by #{item.superseded_by}"
+    return f"fix #{item.id} is already {item.status}"
 
 
 class StalePatchError(Exception):
@@ -48,6 +58,8 @@ class MappingStore(Protocol):
         patch: MappingPatch,
         report: DriftReport,
         samples: list[dict] | None = None,
+        kind: Literal["schema", "meaning"] = "schema",
+        findings: list[MeaningFinding] | None = None,
     ) -> int: ...
     def get_pending(self, pending_id: int) -> PendingPatch: ...
     def list_pending(self, model_key: str | None = None) -> list[PendingPatch]: ...
@@ -73,4 +85,5 @@ __all__ = [
     "StalePatchError",
     "default_store",
     "merge",
+    "not_open",
 ]

@@ -12,4 +12,6 @@ build/
 pyvenv.cfg
 # Demo run state (commit .aegis/ in real projects)
 examples/demo/.aegis/
+examples/meaning/.aegis/
+examples/meaning/released.jsonl
 .superpowers/

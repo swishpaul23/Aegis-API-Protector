@@ -50,7 +50,13 @@ Notifications: `AEGIS_WEBHOOK_URL` is read by the `aegis` CLI only. In a script,
 `Healer(on_pending=webhook_notifier(url))` from `aegis_healer.notify`.
 
 Quarantined records are kept until they are replayed (no automatic purge yet); delete
-`.aegis\quarantine\` to discard them. Use one writer per `.aegis\`: if the GitHub PR flow
+`.aegis\quarantine\` to discard them. Records that failed validation (schema batches) are
+released as soon as they validate with the current mappings. Records blocked for meaning
+drift (same field, new meaning, e.g. dollars to cents) sit in their own batch and are
+released only after you apply the fix or keep the data in `aegis review`; if you reject it,
+the batch is dead: `aegis replay --model ... --discard-dead` deletes it. The meaning check
+runs on every run, also when the schema fix is still pending, so drifted records are never
+loaded. Use one writer per `.aegis\`: if the GitHub PR flow
 also approves fixes for this folder, pull its merged changes before running the script.
 
 Sinks should be idempotent (upsert by key): an API may re-serve records that were already
