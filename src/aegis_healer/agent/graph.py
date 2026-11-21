@@ -58,7 +58,7 @@ class AgentProposer:
 
             llm = ChatAnthropic(
                 model=model or os.environ.get("AEGIS_MODEL", DEFAULT_MODEL),
-                temperature=0,
+                # No temperature: newer Claude models reject it (400).
                 max_tokens=2048,
                 timeout=60,
             )

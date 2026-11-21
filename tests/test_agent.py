@@ -92,3 +92,20 @@ def test_missing_key_raises(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         AgentProposer()
+
+
+def test_default_llm_sends_no_temperature(monkeypatch):
+    """Newer Claude models reject `temperature` with a 400."""
+    import langchain_anthropic
+
+    seen = {}
+
+    class Spy(langchain_anthropic.ChatAnthropic):
+        def __init__(self, **kw):
+            seen.update(kw)
+            super().__init__(**kw)
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", Spy)
+    AgentProposer()
+    assert "temperature" not in seen
