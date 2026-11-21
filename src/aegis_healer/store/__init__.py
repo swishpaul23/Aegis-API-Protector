@@ -26,10 +26,18 @@ class PendingPatch(BaseModel):
     report: DriftReport
     samples: list[dict] = Field(default_factory=list)
     base_version: int
-    status: Literal["pending", "approved", "rejected", "kept"] = "pending"
+    status: Literal["pending", "approved", "rejected", "kept", "superseded"] = "pending"
     kind: Literal["schema", "meaning"] = "schema"
     findings: list[MeaningFinding] = Field(default_factory=list)
+    superseded_by: int | None = None  # the newer meaning fix that replaced this one
     created_at: datetime
+
+
+def not_open(item: PendingPatch) -> str:
+    """Why a fix can't be resolved any more (value-free)."""
+    if item.status == "superseded" and item.superseded_by is not None:
+        return f"fix #{item.id} was superseded by #{item.superseded_by}"
+    return f"fix #{item.id} is already {item.status}"
 
 
 class StalePatchError(Exception):
@@ -77,4 +85,5 @@ __all__ = [
     "StalePatchError",
     "default_store",
     "merge",
+    "not_open",
 ]

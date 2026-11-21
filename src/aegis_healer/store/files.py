@@ -22,6 +22,7 @@ from aegis_healer.store import (
     PendingPatch,
     StalePatchError,
     merge,
+    not_open,
 )
 from aegis_healer.types import DriftReport, FieldMapping, MappingPatch, MeaningFinding
 
@@ -202,7 +203,7 @@ class FileStore:
     def resolve_pending(self, pending_id: int, approve: bool) -> int | None:
         item = self.get_pending(pending_id)
         if item.status != "pending":
-            raise ValueError(f"fix #{pending_id} is already {item.status}")
+            raise ValueError(not_open(item))
         version: int | None = None
         if approve and item.kind == "meaning" and not item.patch.mappings:
             raise ValueError("this meaning fix has no suggested change; use keep instead")
@@ -215,12 +216,23 @@ class FileStore:
         self._write(self._pending_path(pending_id), item.model_dump(mode="json"))
         return version
 
+    def supersede_pending(self, old_id: int, new_id: int) -> None:
+        """Retire an open meaning fix replaced by a newer one for the same drift."""
+        item = self.get_pending(old_id)
+        if item.kind != "meaning":
+            raise ValueError(f"fix #{old_id} is not a meaning fix")
+        if item.status != "pending":
+            raise ValueError(not_open(item))
+        item.status = "superseded"
+        item.superseded_by = int(new_id)
+        self._write(self._pending_path(old_id), item.model_dump(mode="json"))
+
     def keep_pending(self, pending_id: int) -> None:
         """Resolve a meaning fix by keeping the data. Touches no mappings."""
         item = self.get_pending(pending_id)
         if item.kind != "meaning":
             raise ValueError(f"fix #{pending_id} is not a meaning fix")
         if item.status != "pending":
-            raise ValueError(f"fix #{pending_id} is already {item.status}")
+            raise ValueError(not_open(item))
         item.status = "kept"
         self._write(self._pending_path(pending_id), item.model_dump(mode="json"))

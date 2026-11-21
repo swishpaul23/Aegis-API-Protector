@@ -9,7 +9,6 @@ from fixtures.payloads import V1, V2
 from aegis_healer import Healer, Pipeline, PipelineRun
 from aegis_healer.quarantine import Quarantine
 from aegis_healer.store.files import FileStore
-from aegis_healer.types import DriftReport, MappingPatch
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -138,9 +137,7 @@ def test_released_list_has_no_duplicates(tmp_path):
     store = FileStore(tmp_path / ".aegis")
     quarantine = Quarantine(store.root)
     quarantine.add("fixtures.models.User", [V1], "failed", None)
-    pid = store.add_pending("fixtures.models.User", MappingPatch(mappings=[]), DriftReport())
-    store.resolve_pending(pid, True)
-    quarantine.add("fixtures.models.User", [V1], "pending", pid)  # legacy duplicate batches
+    quarantine.add("fixtures.models.User", [V1], "pending", 9)  # legacy duplicate batches
     sunk: list = []
     run = Pipeline(lambda: [], User, sunk.extend, healer=Healer(store=store, proposer=None)).run()
     assert len(sunk) == 1 and run.loaded == 1

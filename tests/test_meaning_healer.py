@@ -335,3 +335,185 @@ def test_meaning_pending_never_reused_for_schema_drift(store):
     pid, is_new = h._pending_for(K, MappingPatch(mappings=[heal]), DriftReport())
     assert is_new and pid != meaning_id
     assert store.get_pending(pid).kind == "schema"
+
+
+# ── meaning check on pending/failed schema runs (final review #1) ────────────
+
+
+def _kinds(store, key=K):
+    return sorted((b.kind, len(b.records)) for b in Quarantine(store.root).list(key))
+
+
+def test_failed_schema_run_still_blocks_meaning_drift(store, notices):
+    """p1: a schema failure must not let cents through to the sink."""
+    from aegis_healer import Pipeline
+
+    h = healer(store, notices)
+    baseline(h)
+    before = profile_bytes(store)
+    bad = {"id": "x-not-int", "amount": 1.0, "currency": "usd", "paid_at": "2026-01-01T10:00:00Z"}
+    result = h.validate(batch(4, scale=100) + [bad], Payment)
+    assert result.status == "failed"
+    assert result.pending_id is None
+    assert result.records == []
+    assert [f.path for f in result.findings] == ["amount"]
+    assert result.meaning_pending_id is not None
+    assert store.get_pending(result.meaning_pending_id).kind == "meaning"
+    assert result.message.endswith("; meaning drift needs review: amount")
+    assert "1000" not in result.message
+    assert result.failed_records == 11
+    batches = {b.kind: b for b in Quarantine(store.root).list(K)}
+    assert set(batches) == {"schema", "meaning"}
+    assert batches["schema"].pending_id is None and len(batches["schema"].records) == 1
+    assert batches["schema"].id == result.quarantine_id
+    assert batches["meaning"].pending_id == result.meaning_pending_id
+    assert batches["meaning"].id == result.meaning_quarantine_id
+    assert len(batches["meaning"].records) == 10
+    assert len(notices) == 1 and notices[0].pending_id == result.meaning_pending_id
+    assert notices[0].fields == ["amount"]
+    assert profile_bytes(store) == before
+    # The Pipeline sinks nothing from this batch either.
+    sunk: list = []
+    run = Pipeline(lambda: batch(5, scale=100) + [bad], Payment, sunk.extend, healer=h).run()
+    assert sunk == [] and run.loaded == 0
+    assert len(notices) == 1  # same meaning drift: pending reused, no new notice
+
+
+def test_pending_schema_run_still_blocks_meaning_drift(store, notices):
+    from fakes import FakeProposer, m
+
+    from aegis_healer.types import MappingPatch
+
+    patch = MappingPatch(mappings=[m("zz_when", "paid_at", confidence=0.5)])
+    h = Healer(store=store, proposer=FakeProposer(patch), on_pending=notices.append)
+    baseline(h)
+    before = profile_bytes(store)
+    rows = batch(4, scale=100)
+    odd = {"id": 77, "amount": 5.0, "currency": "usd", "zz_when": "2026-01-01T10:00:00Z"}
+    result = h.validate(rows + [odd], Payment)
+    assert result.status == "pending"
+    schema_item = store.get_pending(result.pending_id)
+    assert schema_item.kind == "schema"
+    assert result.meaning_pending_id not in (None, result.pending_id)
+    assert result.records == []
+    assert result.proposed.mappings[0].target == "paid_at"  # schema proposal kept
+    assert "meaning drift needs review: amount" in result.message
+    assert _kinds(store) == [("meaning", 10), ("schema", 1)]
+    by_kind = {b.kind: b for b in Quarantine(store.root).list(K)}
+    assert by_kind["schema"].pending_id == result.pending_id
+    assert by_kind["meaning"].pending_id == result.meaning_pending_id
+    assert len(notices) == 1  # both new: one notice, union of fields
+    assert notices[0].fields == ["amount", "paid_at"]
+    assert notices[0].quarantined == 11
+    assert profile_bytes(store) == before
+
+
+def test_mixed_block_and_flag_fields_in_one_run(store):
+    class Opt(BaseModel):
+        id: int
+        amount: float | None = None
+        currency: str
+        paid_at: str
+
+    key = model_key(Opt)
+    h = healer(store, meaning=MeaningConfig(fields={"paid_at": "flag"}))
+    for run in range(4):
+        assert h.validate(batch(run), Opt).status == "ok"
+    rows = batch(4, scale=100, tz="+05:30") + [
+        {"id": 99, "amount": None, "currency": "usd", "paid_at": "2026-01-01T10:00:00+05:30"}
+    ]
+    result = h.validate(rows, Opt)
+    assert result.status == "pending"
+    assert sorted((f.path, f.kind) for f in result.findings) == [
+        ("amount", "scale"),
+        ("paid_at", "timezone"),
+    ]
+    assert [r.id for r in result.records] == [99]  # flagged only: loaded
+    assert result.meaning_pending_id == result.pending_id
+    assert _kinds(store, key) == [("meaning", 10)]
+
+
+def test_failed_run_without_meaning_drift_does_not_teach_baseline(store):
+    h = healer(store)
+    baseline(h)
+    before = profile_bytes(store)
+    bad = {"id": "nope", "amount": 1.0, "currency": "usd", "paid_at": "2026-01-01T10:00:00Z"}
+    result = h.validate(batch(4) + [bad], Payment)
+    assert result.status == "failed" and result.findings == []
+    assert len(result.records) == 10 and result.meaning_pending_id is None
+    assert profile_bytes(store) == before
+
+
+def test_ok_run_sets_meaning_ids(store):
+    h = healer(store)
+    baseline(h)
+    result = h.validate(batch(4, scale=100), Payment)
+    assert result.meaning_pending_id == result.pending_id
+    assert result.meaning_quarantine_id == result.quarantine_id is not None
+    (b,) = Quarantine(store.root).list(K)
+    assert b.kind == "meaning"
+
+
+# ── stale meaning fix superseded after a schema bump (final review #4) ───────
+
+
+def test_meaning_fix_superseded_after_schema_bump_end_to_end(store, notices, tmp_path):
+    """p2: a rename lands between two cents runs; one decision releases everything."""
+    from typer.testing import CliRunner
+
+    from aegis_healer.cli import app
+
+    h = healer(store, notices)
+    baseline(h)
+    first = h.validate(batch(4, scale=100), Payment)
+    assert first.status == "pending"
+    renamed = [
+        {("Currency" if k == "currency" else k): v for k, v in r.items()}
+        for r in batch(5, scale=100)
+    ]
+    second = h.validate(renamed, Payment)
+    assert [m.source for m in second.applied] == ["Currency"]
+    assert second.meaning_pending_id != first.meaning_pending_id
+    old = store.get_pending(first.pending_id)
+    assert old.status == "superseded" and old.superseded_by == second.pending_id
+    assert [p.id for p in store.list_pending(K)] == [second.pending_id]
+    (b,) = Quarantine(store.root).list(K)
+    assert b.kind == "meaning" and b.pending_id == second.pending_id
+    assert len(b.records) == 20
+    assert len(notices) == 2  # one per new pending, nothing about the superseded one
+    store.resolve_pending(second.pending_id, True)
+    out = tmp_path / "released.jsonl"
+    r = CliRunner().invoke(
+        app,
+        ["replay", "--model", f"{__name__}:Payment", "--out", str(out), "--db", str(store.root)],
+    )
+    assert r.exit_code == 0, r.output
+    assert len(out.read_text(encoding="utf-8").splitlines()) == 20
+    assert Quarantine(store.root).list(K) == []
+
+
+def test_supersede_only_same_findings(store):
+    h = healer(store)
+    baseline(h)
+    first = h.validate(batch(4, scale=100), Payment)
+    store.save_active(K, [FieldMapping(source="currency", target="currency")], "bump")
+    second = h.validate(batch(5, tz="+05:30"), Payment)  # different finding
+    assert second.pending_id != first.pending_id
+    assert store.get_pending(first.pending_id).status == "pending"
+
+
+# ── rebuild mismatch (final review #8) ───────────────────────────────────────
+
+
+def test_rebuild_mismatch_skips_meaning_check_loudly(store, monkeypatch, caplog):
+    import logging
+
+    h = healer(store)
+    baseline(h)
+    monkeypatch.setattr(Healer, "_meaning_pairs", lambda self, *a: [])
+    with caplog.at_level(logging.ERROR, logger="aegis_healer"):
+        result = h.validate(batch(4, scale=100), Payment)
+    assert result.status == "ok" and len(result.records) == 10
+    assert result.message == "meaning check skipped"
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert errors and "1000" not in errors[0].getMessage()

@@ -106,7 +106,7 @@ def _quarantined(store, status):
     elif status == "kept":
         store.keep_pending(pid)
     q = Quarantine(store.root)
-    q.add(K, [V1] * 2, "meaning", pid)
+    q.add(K, [V1] * 2, "pending", pid, kind="meaning")
     return q
 
 
@@ -129,7 +129,7 @@ def test_replay_gate_releases_resolved(store, status):
 
 def test_replay_gate_missing_pending_is_unresolved(store):
     q = Quarantine(store.root)
-    q.add(K, [V1], "meaning", 99)
+    q.add(K, [V1], "pending", 99, kind="meaning")
     out = replay(q, Healer(store=store, proposer=None), User)
     assert out.released == [] and out.still_blocked == 1
 
@@ -176,3 +176,74 @@ def test_discard_batches(store):
     ids = [b.id for b in q.list()]
     assert discard_batches(q, ids) == []
     assert q.list() == []
+
+
+# ── batch kinds, supersede, replay gate scope (final review #1, #4, #5) ─────
+
+
+def test_old_batch_file_loads_as_schema(store):
+    q = Quarantine(store.root)
+    bid = q.add(K, [V1], "pending", None)
+    path = q.dir / f"{bid}.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.pop("kind")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert q.load(bid).kind == "schema"
+
+
+def test_add_or_merge_keys_on_kind(store):
+    q = Quarantine(store.root)
+    a = q.add_or_merge(K, [V1], "pending", 3)
+    b = q.add_or_merge(K, [V1], "pending", 3, kind="meaning")
+    assert a != b
+    assert q.add_or_merge(K, [{**V1, "user_id": 9}], "pending", 3, kind="meaning") == b
+    assert {x.kind for x in q.list(K)} == {"schema", "meaning"}
+
+
+def test_supersede_pending(store):
+    old = add_meaning(store)
+    new = add_meaning(store)
+    store.supersede_pending(old, new)
+    item = store.get_pending(old)
+    assert item.status == "superseded" and item.superseded_by == new
+    assert [p.id for p in store.list_pending(K)] == [new]
+    with pytest.raises(ValueError, match=f"superseded by #{new}"):
+        store.resolve_pending(old, True)
+    with pytest.raises(ValueError, match=f"superseded by #{new}"):
+        keep_data(store, old)
+
+
+def test_repoint_merges_and_dedupes(store):
+    q = Quarantine(store.root)
+    q.add(K, [V1, {**V1, "user_id": 2}], "pending", 1, kind="meaning")
+    q.add(K, [V1], "pending", 1)  # a schema batch with the same id is never moved
+    bid = q.add_or_merge(K, [V1, {**V1, "user_id": 3}], "pending", 2, kind="meaning", absorb=[1])
+    batches = {(b.kind, b.pending_id): b for b in q.list(K)}
+    assert set(batches) == {("meaning", 2), ("schema", 1)}
+    assert batches[("meaning", 2)].id == bid
+    assert len(batches[("meaning", 2)].records) == 3
+
+
+@pytest.mark.parametrize("status", ["pending", "superseded"])
+def test_replay_gate_blocks_superseded_meaning_batch(store, status):
+    old = add_meaning(store)
+    if status == "superseded":
+        store.supersede_pending(old, add_meaning(store))
+    q = Quarantine(store.root)
+    q.add(K, [V1], "pending", old, kind="meaning")
+    out = replay(q, Healer(store=store, proposer=None), User)
+    assert out.released == [] and out.still_blocked == 1 and out.dead_batches == []
+
+
+@pytest.mark.parametrize("status", ["pending", "rejected", "missing"])
+def test_schema_batches_ignore_pending_status(store, status):
+    """Phase 2 semantics: schema batches release whatever validates now."""
+    pid = 42
+    if status != "missing":
+        pid = store.add_pending(K, MappingPatch(mappings=[m("a", "b")]), DriftReport())
+        if status == "rejected":
+            store.resolve_pending(pid, False)
+    q = Quarantine(store.root)
+    q.add(K, [V1], "pending", pid)
+    out = replay(q, Healer(store=store, proposer=None), User)
+    assert len(out.released) == 1 and out.still_blocked == 0 and out.dead_batches == []

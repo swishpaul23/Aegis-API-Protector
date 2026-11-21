@@ -11,7 +11,7 @@ from aegis_healer import Healer
 from aegis_healer.cli import app
 from aegis_healer.quarantine import Quarantine, replay
 from aegis_healer.store.files import FileStore
-from aegis_healer.types import DriftReport, MappingPatch
+from aegis_healer.types import DriftReport, MappingPatch, MeaningFinding
 
 runner = CliRunner(env={"COLUMNS": "200"})
 KEY = "fixtures.models.User"
@@ -318,10 +318,6 @@ def _mixed_batch(tmp_path):
     healed = Healer(store=store, proposer=FakeProposer(v2_agent_patch(0.95))).validate(V2, User)
     assert healed.status == "healed"
     bad = {**V2, "id": "abc"}
-    # replay only releases batches whose pending fix was resolved
-    pid = store.add_pending(KEY, MappingPatch(mappings=[]), DriftReport())
-    store.resolve_pending(pid, True)
-    assert pid == 1
     bid = q.add(KEY, [V2, {**V2, "id": "2"}, bad], "pending", 1)
     return store, q, bid, bad
 
@@ -388,7 +384,7 @@ def test_cli_replay_out_refuses_to_overwrite(tmp_path):
 def test_cli_replay_out_dedupes_across_batches(tmp_path):
     store = approved(tmp_path)
     q = Quarantine(store.root)
-    q.add(KEY, [V2], "pending", 1)  # the same record quarantined twice
+    q.add(KEY, [V2], "pending", 99)  # the same record quarantined twice
     out = tmp_path / "o.jsonl"
     r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
     assert r.exit_code == 0, r.output
@@ -407,20 +403,23 @@ def test_gitignore_restored_on_merge_and_rewrite(tmp_path):
     assert "quarantine/" in gi.read_text(encoding="utf-8").splitlines()
 
 
-def _rejected_then_approved(tmp_path):
+def _rejected_then_kept(tmp_path):
     store = FileStore(tmp_path / ".aegis")
     q = Quarantine(store.root)
-    p1 = store.add_pending(KEY, MappingPatch(mappings=[]), DriftReport())
+    finding = MeaningFinding(path="user_id", kind="scale", detail="x", baseline_n=30, batch_n=6)
+    p1, p2 = (
+        store.add_pending(KEY, MappingPatch(), DriftReport(), kind="meaning", findings=[finding])
+        for _ in range(2)
+    )
     store.resolve_pending(p1, False)
-    p2 = store.add_pending(KEY, MappingPatch(mappings=[]), DriftReport())
-    store.resolve_pending(p2, True)
-    q.add(KEY, [V1], "pending", p1)
-    q.add(KEY, [{**V1, "user_id": 2}], "pending", p2)
+    store.keep_pending(p2)
+    q.add(KEY, [V1], "pending", p1, kind="meaning")
+    q.add(KEY, [{**V1, "user_id": 2}], "pending", p2, kind="meaning")
     return store, q
 
 
 def test_cli_replay_dead_batch_exits_zero_and_discard(tmp_path):
-    store, q = _rejected_then_approved(tmp_path)
+    store, q = _rejected_then_kept(tmp_path)
     out = tmp_path / "o.jsonl"
     r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
     assert r.exit_code == 0, r.output
@@ -435,7 +434,7 @@ def test_cli_replay_dead_batch_exits_zero_and_discard(tmp_path):
 def test_pipeline_ignores_dead_batches(tmp_path):
     from aegis_healer import Pipeline
 
-    store, q = _rejected_then_approved(tmp_path)
+    store, q = _rejected_then_kept(tmp_path)
     run = Pipeline(
         lambda: [], User, lambda recs: None, healer=Healer(store=store, proposer=None)
     ).run()

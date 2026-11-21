@@ -57,7 +57,14 @@ class HealResult(BaseModel):
     usage: Usage = Field(default_factory=Usage)
     quarantine_id: str | None = None
     findings: list[MeaningFinding] = Field(default_factory=list)
+    # The meaning fix for `findings` and the batch of records it blocked. On an ok/healed
+    # schema run they equal pending_id/quarantine_id; on a pending/failed one those stay
+    # the schema fix and its batch, and these are separate.
+    meaning_pending_id: int | None = None
+    meaning_quarantine_id: str | None = None
+    schema_status: Status | None = None  # status before the meaning check
     pending_is_new: bool = False  # internal: False when an existing pending fix was reused
+    meaning_pending_is_new: bool = Field(default=False, exclude=True, repr=False)
 
     def raise_for_status(self) -> HealResult:
         if self.status not in ("ok", "healed"):
@@ -321,27 +328,51 @@ class Healer:
         records_path: str | None = None,
     ) -> HealResult:
         result, failing, count = self._validate(payload, model, records_path)
-        if self.meaning_config is not None and result.status in ("ok", "healed"):
-            self._check_meaning(payload, model, records_path, result, failing)
+        result.schema_status = result.status
+        # A healed run's `failing` lists records the fix healed: nothing to quarantine.
+        schema_failing = failing if result.status in ("pending", "failed") else []
+        schema_new = result.status == "pending" and result.pending_is_new
+        schema_fields: set[str] = set()
+        if schema_new and result.proposed:
+            schema_fields = {m.target for m in result.proposed.mappings}
+        blocked: list[dict[str, Any]] = []
+        superseded: list[int] = []
+        if self.meaning_config is not None:
+            blocked, superseded = self._check_meaning(payload, model, records_path, result)
         if self.privacy != "full" and result.report is not None:
             result.report = mask_report(result.report)
+        quarantined = 0
         if self.persist:
-            self._quarantine(model, result, failing)
+            quarantined = self._quarantine(model, result, schema_failing, blocked, superseded)
             self._log_run(model, result, count)
-        if result.status == "pending" and result.pending_is_new:
-            self._notify(model, result, len(failing) if result.quarantine_id else 0)
+        notify_ids = []
+        fields = set(schema_fields)
+        if schema_new:
+            notify_ids.append(result.pending_id)
+        if result.meaning_pending_is_new and result.meaning_pending_id not in notify_ids:
+            notify_ids.append(result.meaning_pending_id)
+            fields |= {f.path for f in result.findings}
+        if notify_ids:
+            self._notify(model, result, notify_ids[0], sorted(fields), quarantined)
         return result
 
-    def _notify(self, model: type[BaseModel], result: HealResult, quarantined: int) -> None:
+    def _notify(
+        self,
+        model: type[BaseModel],
+        result: HealResult,
+        pending_id: int | None,
+        fields: list[str],
+        quarantined: int,
+    ) -> None:
+        """One notice per run, for every new pending fix (schema and/or meaning)."""
         if self.on_pending is None or not self.persist:
             return  # a dry run has nothing to review
         mappings = result.proposed.mappings if result.proposed else []
         agent_conf = [m.confidence for m in mappings if m.origin == "agent"]
         key = model_key(model)
-        fields = sorted({m.target for m in mappings} | {f.path for f in result.findings})
         notice = PendingNotice(
             model_key=key,
-            pending_id=result.pending_id,
+            pending_id=pending_id,
             fields=fields,
             min_confidence=min(agent_conf) if agent_conf else None,
             quarantined=quarantined,
@@ -356,23 +387,14 @@ class Healer:
             )
 
     # ── meaning drift ───────────────────────────────────────
-    def _check_meaning(
+    def _meaning_pairs(
         self,
         payload: Any,
         model: type[BaseModel],
         records_path: str | None,
-        result: HealResult,
-        failing: list[dict[str, Any]],
-    ) -> None:
-        """After a schema-clean run: block or flag records whose values changed meaning."""
-        root = getattr(self.store, "root", None)
-        config = self.meaning_config
-        if root is None or config is None or not result.records:
-            return
-        log = logging.getLogger("aegis_healer")
-        key = model_key(model)
-        active = self.store.get_active(key)
-        in_effect = active if self.persist else merge(active, result.applied)
+        in_effect: list[FieldMapping],
+    ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        """(raw, mapped) for every record that validates with `in_effect`, in payload order."""
         pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for raw in self._extract(payload, records_path):
             try:
@@ -382,9 +404,37 @@ class Healer:
                 continue
             if not soft_missing(mapped, model):
                 pairs.append((raw, mapped))
+        return pairs
+
+    def _check_meaning(
+        self,
+        payload: Any,
+        model: type[BaseModel],
+        records_path: str | None,
+        result: HealResult,
+    ) -> tuple[list[dict[str, Any]], list[int]]:
+        """Block or flag valid records whose values changed meaning, whatever the schema status.
+
+        Returns the raw records to quarantine for meaning drift and the ids of older meaning
+        fixes the new one superseded. On an ok/healed run the result becomes `pending` on the
+        meaning fix; on a pending/failed run the status and the schema fix stay, and the
+        meaning fix is reported in `meaning_pending_id`.
+        """
+        root = getattr(self.store, "root", None)
+        config = self.meaning_config
+        if root is None or config is None or not result.records:
+            return [], []
+        log = logging.getLogger("aegis_healer")
+        key = model_key(model)
+        active = self.store.get_active(key)
+        in_effect = active if self.persist else merge(active, result.applied)
+        pairs = self._meaning_pairs(payload, model, records_path, in_effect)
         if len(pairs) != len(result.records):
-            log.warning("meaning check skipped: could not rebuild the validated records")
-            return
+            # Value-free: never log the records. Fails open, but loudly and in the result.
+            log.error("meaning check skipped: could not rebuild the validated records")
+            note = "meaning check skipped"
+            result.message = f"{result.message}; {note}" if result.message else note
+            return [], []
         mapped_records = [mapped for _, mapped in pairs]
 
         profile = load_profile(root, key)
@@ -393,14 +443,16 @@ class Healer:
             for f in detect(profile, mapped_records, model)
             if config.policy_for(key, f.path) != "off"
         ]
+        schema_clean = result.status in ("ok", "healed")
         if not findings:
-            if self.persist:
+            # The baseline learns only from fully healthy runs.
+            if self.persist and schema_clean:
                 observe(profile, mapped_records, model)
                 try:
                     save_profile(root, profile)
                 except OSError as exc:  # a baseline write must never break validation
                     log.warning("could not save meaning profile: %s", type(exc).__name__)
-            return  # the baseline never learns from a drifted batch
+            return [], []
 
         blocked_paths = {f.path for f in findings if config.policy_for(key, f.path) == "block"}
         kept: list[Any] = []
@@ -410,8 +462,6 @@ class Healer:
                 blocked.append(raw)
             else:
                 kept.append(obj)
-        # Every record of an ok/healed run validated: only the blocked ones are quarantined.
-        failing[:] = blocked
 
         fixes: list[FieldMapping] = []
         for f in findings:
@@ -431,59 +481,104 @@ class Healer:
             else:
                 fixes += _rebase([FieldMapping(source=f.path, target=f.path, **update)], in_effect)
         proposed = MappingPatch(mappings=fixes)
-        pending_id, is_new = (
-            self._meaning_pending_for(key, proposed, findings) if self.persist else (None, False)
-        )
+        superseded: list[int] = []
+        pending_id, is_new = None, False
+        if self.persist:
+            pending_id, is_new, superseded = self._meaning_pending_for(key, proposed, findings)
+        paths = ", ".join(sorted({f.path for f in findings}))
         result.records = kept
-        result.failed_records = len(blocked)
-        result.status = "pending"
+        result.failed_records += len(blocked)
         result.findings = findings
-        result.proposed = proposed
-        result.pending_id = pending_id
-        result.pending_is_new = is_new
-        result.message = (
-            f"Meaning drift needs review: {', '.join(sorted({f.path for f in findings}))}"
-        )
+        result.meaning_pending_id = pending_id
+        result.meaning_pending_is_new = is_new
+        if schema_clean:
+            result.status = "pending"
+            result.proposed = proposed
+            result.pending_id = pending_id
+            result.pending_is_new = is_new
+            result.message = f"Meaning drift needs review: {paths}"
+        else:  # the schema fix (or failure) stays the headline; no payload values here
+            result.message = f"{result.message}; meaning drift needs review: {paths}"
+        return blocked, superseded
 
     def _meaning_pending_for(
         self, key: str, proposed: MappingPatch, findings: list[MeaningFinding]
-    ) -> tuple[int, bool]:
-        """Reuse an open meaning fix for the same base version and the same findings."""
+    ) -> tuple[int, bool, list[int]]:
+        """Reuse an open meaning fix for the same base version and the same findings.
+
+        A new fix supersedes open ones for the same findings built on an older mapping
+        version (they can no longer be approved: stale). Returns (id, is_new, superseded).
+        """
         base_version = self.store.active_version(key)
         wanted = _finding_sig(findings)
-        for item in self.store.list_pending(key):
-            if (
-                item.kind == "meaning"
-                and item.base_version == base_version
-                and _finding_sig(item.findings) == wanted
-            ):
-                return item.id, False
+        same = [
+            item
+            for item in self.store.list_pending(key)
+            if item.kind == "meaning" and _finding_sig(item.findings) == wanted
+        ]
+        for item in same:
+            if item.base_version == base_version:
+                return item.id, False, []
         # No report data: pending files are committed to git.
         pid = self.store.add_pending(
             key, proposed, DriftReport(), kind="meaning", findings=findings
         )
-        return pid, True
+        superseded: list[int] = []
+        supersede = getattr(self.store, "supersede_pending", None)
+        if supersede is not None:
+            for item in same:
+                if item.base_version < base_version:
+                    try:
+                        supersede(item.id, pid)
+                    except (OSError, ValueError, KeyError) as exc:
+                        logging.getLogger("aegis_healer").warning(
+                            "could not supersede fix #%s: %s", item.id, type(exc).__name__
+                        )
+                        continue
+                    superseded.append(item.id)
+        return pid, True, superseded
 
     def _quarantine(
-        self, model: type[BaseModel], result: HealResult, failing: list[dict[str, Any]]
-    ) -> None:
+        self,
+        model: type[BaseModel],
+        result: HealResult,
+        schema_failing: list[dict[str, Any]],
+        blocked: list[dict[str, Any]],
+        superseded: list[int],
+    ) -> int:
+        """Schema-failing and meaning-blocked records go to separate batches. Returns count."""
         root = getattr(self.store, "root", None)
-        if root is None or not self.quarantine or result.status not in ("pending", "failed"):
-            return
-        if not failing:
-            return
-        try:
-            # The reason is the status only: payload values must never leak into it.
-            result.quarantine_id = Quarantine(root).add_or_merge(
-                model_key(model), failing, result.status, result.pending_id
-            )
-        except (
-            OSError,
-            ValueError,
-        ) as exc:  # keep the pipeline flowing; the records are in the caller's hands
-            logging.getLogger("aegis_healer").warning(
-                "could not quarantine records: %s", type(exc).__name__
-            )
+        if root is None or not self.quarantine:
+            return 0
+        log = logging.getLogger("aegis_healer")
+        key = model_key(model)
+        quarantine = Quarantine(root)
+        count = 0
+        if schema_failing and result.schema_status in ("pending", "failed"):
+            try:
+                # The reason is the status only: payload values must never leak into it.
+                result.quarantine_id = quarantine.add_or_merge(
+                    key, schema_failing, str(result.schema_status), result.pending_id
+                )
+                count += len(schema_failing)
+            except (OSError, ValueError) as exc:  # keep the pipeline flowing
+                log.warning("could not quarantine records: %s", type(exc).__name__)
+        if blocked or superseded:
+            try:
+                result.meaning_quarantine_id = quarantine.add_or_merge(
+                    key,
+                    blocked,
+                    "pending",
+                    result.meaning_pending_id,
+                    kind="meaning",
+                    absorb=superseded,
+                )
+                count += len(blocked)
+            except (OSError, ValueError) as exc:
+                log.warning("could not quarantine records: %s", type(exc).__name__)
+            if result.schema_status in ("ok", "healed"):
+                result.quarantine_id = result.meaning_quarantine_id
+        return count
 
     def _log_run(self, model: type[BaseModel], result: HealResult, count: int) -> None:
         root = getattr(self.store, "root", None)
