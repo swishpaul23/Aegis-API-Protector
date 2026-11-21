@@ -204,6 +204,8 @@ class FileStore:
         if item.status != "pending":
             raise ValueError(f"fix #{pending_id} is already {item.status}")
         version: int | None = None
+        if approve and item.kind == "meaning" and not item.patch.mappings:
+            raise ValueError("this meaning fix has no suggested change; use keep instead")
         if approve:
             if item.base_version != self.active_version(item.model_key):
                 raise StalePatchError("stale; re-run check")

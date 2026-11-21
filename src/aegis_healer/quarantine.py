@@ -37,6 +37,8 @@ class ReplayResult(BaseModel):
 
     released: list[Any] = Field(default_factory=list)
     still_blocked: int = 0
+    # batches tied to a rejected fix: skipped, not counted as blocked, safe to discard
+    dead_batches: list[str] = Field(default_factory=list)
     batches_cleared: list[str] = Field(default_factory=list)
     batches_reduced: list[str] = Field(default_factory=list)
     remove_failed: list[str] = Field(default_factory=list)
@@ -192,12 +194,17 @@ def apply_replay(quarantine: Quarantine, result: ReplayResult) -> list[str]:
     return failed
 
 
-def _resolved(healer: Healer, pending_id: int) -> bool:
-    """True once the fix a batch waits on was approved or kept; unreadable counts as open."""
+def _fix_status(healer: Healer, pending_id: int) -> str | None:
+    """Status of the fix a batch waits on; None when it is missing or unreadable."""
     try:
-        return healer.store.get_pending(pending_id).status in ("approved", "kept")
+        return healer.store.get_pending(pending_id).status
     except (KeyError, ValueError, OSError):
-        return False
+        return None
+
+
+def discard_batches(quarantine: Quarantine, batch_ids: list[str]) -> list[str]:
+    """Remove batches (e.g. dead ones); returns the ids that could not be removed."""
+    return remove_batches(quarantine, batch_ids)
 
 
 def replay(
@@ -210,11 +217,12 @@ def replay(
     """Re-check quarantined records against the current active mappings only.
 
     No matcher, no agent, no new pending fix, no run log. A batch tied to a pending fix is
-    skipped (counted as still blocked) until that fix is approved or kept. Every record in
-    the other batches that validates is released. A batch whose records all validate is
-    cleared; a batch with some records still failing is reduced to those records (same id).
-    With `remove=True` that happens here; with `remove=False` the caller applies it with
-    `apply_replay` once the released records are safe.
+    skipped (counted as still blocked) until that fix is approved or kept; a batch of a
+    rejected fix is dead: skipped and listed in `dead_batches`, not counted as blocked.
+    Every record in the other batches that validates is released. A batch whose records all
+    validate is cleared; a batch with some records still failing is reduced to those records
+    (same id). With `remove=True` that happens here; with `remove=False` the caller applies
+    it with `apply_replay` once the released records are safe.
     """
     from aegis_healer.healer import Healer as _Healer
 
@@ -226,9 +234,14 @@ def replay(
     mappings = healer.store.get_active(key)
     result = ReplayResult()
     for batch in batches:
-        if batch.pending_id is not None and not _resolved(healer, batch.pending_id):
-            result.still_blocked += len(batch.records)  # tied to an unresolved fix
-            continue
+        if batch.pending_id is not None:
+            status = _fix_status(healer, batch.pending_id)
+            if status == "rejected":
+                result.dead_batches.append(batch.id)
+                continue
+            if status not in ("approved", "kept"):
+                result.still_blocked += len(batch.records)  # tied to an unresolved fix
+                continue
         valid, failing = _Healer._split(batch.records, mappings, model)
         result.released += valid
         result.still_blocked += len(failing)

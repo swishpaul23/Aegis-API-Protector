@@ -27,7 +27,7 @@ def load_config(root: Path) -> MeaningConfig:
     try:
         with path.open("rb") as f:
             data = tomllib.load(f)
-    except tomllib.TOMLDecodeError:
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError):
         raise ValueError(f"{path.name} is not valid TOML") from None
     table = data.get("meaning")
     if table is None:

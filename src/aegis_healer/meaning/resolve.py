@@ -12,9 +12,13 @@ def keep_data(store: FileStore, pending_id: int) -> list[str]:
     if root is None:
         raise ValueError("this store has no folder for profiles")
     item = store.get_pending(pending_id)
+    if item.kind != "meaning":
+        raise ValueError(f"fix #{pending_id} is not a meaning fix")
+    if item.status != "pending":
+        raise ValueError(f"fix #{pending_id} is already {item.status}")
     paths = list(dict.fromkeys(f.path for f in item.findings))
-    store.keep_pending(pending_id)
     profile = load_profile(root, item.model_key)
     reset_fields(profile, paths)
-    save_profile(root, profile)
+    save_profile(root, profile)  # before keep: a failure here leaves the fix open to retry
+    store.keep_pending(pending_id)
     return paths

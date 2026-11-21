@@ -11,8 +11,14 @@ import typer
 from aegis_healer.cli.common import console, error_text, get_store, load_model, safe
 from aegis_healer.healer import Healer
 from aegis_healer.paths import model_key
-from aegis_healer.quarantine import Quarantine, apply_replay, atomic_write
+from aegis_healer.quarantine import Quarantine, apply_replay, atomic_write, discard_batches
 from aegis_healer.quarantine import replay as run_replay
+
+
+def _left(quarantine: Quarantine, batch_ids: list[str]) -> int:
+    """Records in batches that could not be removed."""
+    ids = set(batch_ids)
+    return sum(len(b.records) for b in quarantine.list() if b.id in ids)
 
 
 def replay(
@@ -21,6 +27,9 @@ def replay(
     out: Annotated[
         Path | None, typer.Option(help="Write released records here (JSON Lines), then remove")
     ] = None,
+    discard_dead: Annotated[
+        bool, typer.Option("--discard-dead", help="Delete batches that belong to rejected fixes")
+    ] = False,
     db: Annotated[str | None, typer.Option(help="Store folder (default .aegis)")] = None,
 ) -> None:
     """Re-check quarantined records with the current mappings and release the valid ones."""
@@ -88,5 +97,17 @@ def replay(
             "The rest still fail with the current mappings and stay quarantined "
             "(see aegis review for open fixes)."
         )
+    if result.dead_batches:
+        if discard_dead:
+            dead = set(result.dead_batches)
+            count = sum(len(b.records) for b in quarantine.list(model_key(cls)) if b.id in dead)
+            not_removed = discard_batches(quarantine, result.dead_batches)
+            console.print(f"Discarded {count - _left(quarantine, not_removed)} record(s).")
+            failed += not_removed
+        else:
+            console.print(
+                f"{len(result.dead_batches)} batch(es) belong to rejected fixes; "
+                "use --discard-dead to delete them."
+            )
     if failed or result.still_blocked:
         raise typer.Exit(1)

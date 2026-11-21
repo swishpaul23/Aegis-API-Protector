@@ -405,3 +405,38 @@ def test_gitignore_restored_on_merge_and_rewrite(tmp_path):
     gi.unlink()
     replay(q, Healer(store=store, proposer=None), User)
     assert "quarantine/" in gi.read_text(encoding="utf-8").splitlines()
+
+
+def _rejected_then_approved(tmp_path):
+    store = FileStore(tmp_path / ".aegis")
+    q = Quarantine(store.root)
+    p1 = store.add_pending(KEY, MappingPatch(mappings=[]), DriftReport())
+    store.resolve_pending(p1, False)
+    p2 = store.add_pending(KEY, MappingPatch(mappings=[]), DriftReport())
+    store.resolve_pending(p2, True)
+    q.add(KEY, [V1], "pending", p1)
+    q.add(KEY, [{**V1, "user_id": 2}], "pending", p2)
+    return store, q
+
+
+def test_cli_replay_dead_batch_exits_zero_and_discard(tmp_path):
+    store, q = _rejected_then_approved(tmp_path)
+    out = tmp_path / "o.jsonl"
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--out", str(out), "--db", str(store.root)])
+    assert r.exit_code == 0, r.output
+    assert "1 batch(es) belong to rejected fixes; use --discard-dead to delete them." in r.output
+    assert len(q.list()) == 1
+    r = runner.invoke(app, ["replay", "--model", SPEC, "--discard-dead", "--db", str(store.root)])
+    assert r.exit_code == 0, r.output
+    assert "1 record(s)" in r.output
+    assert q.list() == []
+
+
+def test_pipeline_ignores_dead_batches(tmp_path):
+    from aegis_healer import Pipeline
+
+    store, q = _rejected_then_approved(tmp_path)
+    run = Pipeline(
+        lambda: [], User, lambda recs: None, healer=Healer(store=store, proposer=None)
+    ).run()
+    assert run.quarantined == 0

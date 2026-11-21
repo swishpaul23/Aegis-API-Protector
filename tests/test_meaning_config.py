@@ -54,3 +54,9 @@ def test_invalid_toml(tmp_path):
     with pytest.raises(ValueError, match="config.toml is not valid TOML") as e:
         load_config(tmp_path)
     assert "secret" not in str(e.value)
+
+
+def test_non_utf8_config_is_invalid_toml(tmp_path):
+    (tmp_path / "config.toml").write_bytes(b"\xff\xfe[meaning]\n\x80")
+    with pytest.raises(ValueError, match="is not valid TOML"):
+        load_config(tmp_path)

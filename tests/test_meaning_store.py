@@ -96,10 +96,12 @@ def test_keep_data_needs_root(store):
 
 
 def _quarantined(store, status):
-    pid = add_meaning(store)
-    if status == "approved":
+    if status == "approved":  # a meaning fix needs a suggested change to be approved
+        pid = store.add_pending(K, MappingPatch(mappings=[]), DriftReport())
         store.resolve_pending(pid, True)
-    elif status == "rejected":
+    else:
+        pid = add_meaning(store)
+    if status == "rejected":
         store.resolve_pending(pid, False)
     elif status == "kept":
         store.keep_pending(pid)
@@ -108,7 +110,7 @@ def _quarantined(store, status):
     return q
 
 
-@pytest.mark.parametrize("status", ["pending", "rejected"])
+@pytest.mark.parametrize("status", ["pending"])
 def test_replay_gate_blocks_unresolved(store, status):
     q = _quarantined(store, status)
     out = replay(q, Healer(store=store, proposer=None), User)
@@ -130,3 +132,47 @@ def test_replay_gate_missing_pending_is_unresolved(store):
     q.add(K, [V1], "meaning", 99)
     out = replay(q, Healer(store=store, proposer=None), User)
     assert out.released == [] and out.still_blocked == 1
+
+
+def test_keep_data_save_failure_leaves_pending(store, monkeypatch):
+    import aegis_healer.meaning.resolve as res
+
+    pid = add_meaning(store)
+
+    def boom(*a, **k):
+        raise OSError("disk")
+
+    monkeypatch.setattr(res, "save_profile", boom)
+    with pytest.raises(OSError):
+        keep_data(store, pid)
+    assert store.get_pending(pid).status == "pending"
+
+
+def test_keep_data_rejects_schema_fix(store):
+    sid = store.add_pending(K, MappingPatch(mappings=[m("a", "b")]), DriftReport())
+    with pytest.raises(ValueError):
+        keep_data(store, sid)
+
+
+def test_approve_meaning_fix_without_mappings_refused(store):
+    pid = add_meaning(store)
+    with pytest.raises(ValueError, match="use keep instead"):
+        store.resolve_pending(pid, True)
+    assert store.get_pending(pid).status == "pending"
+    store.resolve_pending(pid, False)  # reject is still fine
+
+
+def test_replay_rejected_batch_is_dead_not_blocked(store):
+    q = _quarantined(store, "rejected")
+    out = replay(q, Healer(store=store, proposer=None), User)
+    assert out.still_blocked == 0 and len(out.dead_batches) == 1
+    assert out.released == []
+
+
+def test_discard_batches(store):
+    from aegis_healer.quarantine import discard_batches
+
+    q = _quarantined(store, "rejected")
+    ids = [b.id for b in q.list()]
+    assert discard_batches(q, ids) == []
+    assert q.list() == []
