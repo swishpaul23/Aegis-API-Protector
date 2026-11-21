@@ -42,10 +42,18 @@ If your model needs installed dependencies, add a step before the check, e.g.
 ## Meaning-drift fixes
 
 When the API keeps its field names but changes what the values mean (dollars become cents),
-the review PR holds a meaning fix. If it has a suggested scale, **merging the PR approves it**
-like any other fix, and the blocked records can then be replayed. **"Keep data"** (the new
-values are the new normal) can't be done by merging: run `aegis review --keep ID` locally,
-commit the updated `.aegis/profiles/`, and close the PR.
+the check exits 1 and the workflow opens a review PR with a meaning fix.
+
+- **Baseline**: detection needs the learned baseline, so the workflow also commits
+  `.aegis/profiles/` (aggregate counts only, no values). The baseline is only learned when a
+  PR is merged, so the first runs just build it (a field needs 20 records of history).
+- **Blocked records**: quarantined records are not persisted on ephemeral runners. In CI
+  "blocked" means the run opens a review PR; after you merge the fix, the next run re-fetches
+  the records. There is no replay in CI.
+- **Apply**: a fix with a suggested scale is approved by merging the PR, like any fix.
+- **Keep data** (the new values are the new normal) can't be done by merging: check out the
+  review PR branch, run `aegis review --keep ID`, commit `.aegis/pending` and
+  `.aegis/profiles`, push, and merge.
 
 ## Closing a review PR
 

@@ -93,6 +93,16 @@ def test_demo_files_validate_against_demo_models():
         sys.modules.pop(name, None)
 
 
+def test_scale_fix_reproduces_v1_amounts_exactly():
+    from aegis_healer.mapping import map_value
+    from aegis_healer.types import FieldMapping
+
+    m = FieldMapping(source="amount", target="amount", scale=0.01)
+    v1, v2 = demo_json("payments_v1.json"), demo_json("payments_v2.json")
+    for a, b in zip(v1, v2, strict=True):
+        assert map_value(b, m) == a["amount"]
+
+
 def test_demo_end_to_end(env):
     store, state = env
     build_baseline(state)  # v1 twice: ok
@@ -102,6 +112,7 @@ def test_demo_end_to_end(env):
     assert "Suggested fix" in r.output and "x0.01" in r.output and "scale" in r.output
     assert r.output.index("x0.01") < r.output.index("Pending")  # table before the status line
     assert "aegis review" in r.output
+    assert "matcher" not in r.output and "1.00" not in r.output  # no mapping table
 
     r = run("review", "--approve", "1")
     assert r.exit_code == 0, r.output
@@ -112,8 +123,8 @@ def test_demo_end_to_end(env):
     assert r.exit_code == 0, r.output
     lines = [json.loads(x) for x in out.read_text(encoding="utf-8").splitlines()]
     assert len(lines) == 25
-    assert sorted(x["amount"] for x in lines) == pytest.approx(
-        sorted(x["amount"] for x in demo_json("payments_v1.json"))
+    assert sorted(x["amount"] for x in lines) == sorted(
+        x["amount"] for x in demo_json("payments_v1.json")
     )
 
 
@@ -128,6 +139,7 @@ def test_review_interactive_apply_meaning_fix(env):
     for word in ("Field", "Kind", "Detail", "Suggested fix", "x0.01"):
         assert word in r.output
     assert "[a]pply fix" in r.output and "[k]eep data" in r.output
+    assert "matcher" not in r.output and "1.00" not in r.output
     assert "Approved fix #1" in r.output
     assert "aegis replay --model models:Payment" in r.output
     assert store.get_pending(1).status == "approved"

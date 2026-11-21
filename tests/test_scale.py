@@ -96,3 +96,15 @@ def test_describe_scale_not_truncated():
     from aegis_healer.cli.common import describe
 
     assert describe(FM(source="a", target="b", scale=0.0123456789)) == "x0.0123456789"
+
+
+def test_scale_has_no_float_noise():
+    assert map_value({"a": 3480}, FM(source="a", target="b", scale=0.01)) == 34.8
+    assert map_value({"a": 1250}, FM(source="a", target="b", scale=0.01)) == 12.5
+    assert map_value({"a": 5}, FM(source="a", target="b", scale=100)) == 500
+    assert type(map_value({"a": 5}, FM(source="a", target="b", scale=100))) is int
+
+
+def test_scale_huge_int_is_refused():
+    with pytest.raises(ValueError):
+        map_value({"a": 10**400}, FM(source="a", target="b", scale=0.01))

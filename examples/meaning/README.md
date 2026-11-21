@@ -38,3 +38,5 @@ Try `[k]eep data` at step 3 instead (`aegis review --keep 1`): the baseline for 
 resets, the cents values become the new normal after a couple of runs on `payments_v2.json`,
 and `aegis replay` releases the blocked records as they are. To skip the checks for one run,
 add `--no-meaning` to `aegis check`.
+
+To start over, delete the state: `Remove-Item -Recurse -Force .aegis`

@@ -6,6 +6,7 @@ import copy
 import math
 from collections.abc import Callable
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from aegis_healer.paths import get_path, has_path, pop_path, set_path
@@ -93,13 +94,15 @@ def _apply_scale(value: Any, scale: float) -> int | float:
     try:
         if not math.isfinite(value):
             raise ValueError("value is not finite")
-        result = value * scale
+        # Decimal on the shortest repr: 3480 * 0.01 is 34.8, not 34.800000000000004.
+        product = Decimal(repr(value)) * Decimal(repr(scale))
+        result = float(product)
     except OverflowError:
         raise ValueError("scaled value is not finite") from None
     if not math.isfinite(result):
         raise ValueError("scaled value is not finite")
-    if isinstance(value, int) and isinstance(result, float) and result.is_integer():
-        return int(result)
+    if isinstance(value, int) and product == product.to_integral_value():
+        return int(product)
     return result
 
 

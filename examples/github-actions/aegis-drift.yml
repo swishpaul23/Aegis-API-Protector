@@ -88,7 +88,7 @@ jobs:
           BRANCH: aegis/auto-${{ github.run_id }}
         run: |
           # runs.jsonl is deliberately not staged: it changes on every run.
-          git add .aegis/mappings .aegis/history
+          git add .aegis/mappings .aegis/history .aegis/profiles
           if git diff --cached --quiet; then
             echo "No changes to .aegis; nothing to do."
             exit 0
@@ -138,7 +138,7 @@ jobs:
             aegis review --approve "$id"
             title_ids="${title_ids:+$title_ids, }#$id"
           done < pending-ids.txt
-          git add .aegis/pending .aegis/mappings .aegis/history
+          git add .aegis/pending .aegis/mappings .aegis/history .aegis/profiles
           if git diff --cached --quiet; then
             echo "No changes to .aegis; nothing to do."
             exit 0

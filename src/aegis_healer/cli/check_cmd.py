@@ -84,7 +84,10 @@ def check(
         int, typer.Option(min=0, help="Max LLM calls for this run (0 = rules only)")
     ] = 10,
     no_meaning: Annotated[
-        bool, typer.Option("--no-meaning", help="Skip the meaning-drift checks (scale, timezone)")
+        bool,
+        typer.Option(
+            "--no-meaning", help="Skip the meaning-drift checks (scale, timezone, category)"
+        ),
     ] = False,
 ) -> None:
     """Check an API against your model. Exit 0 ok/healed, 1 pending review, 2 failed."""
@@ -131,7 +134,7 @@ def check(
             console.print(
                 f"Drift found: {len(r.missing)} missing, {len(r.type_mismatches)} type change(s)"
             )
-        if result.proposed and result.proposed.mappings:
+        if result.proposed and result.proposed.mappings and not result.findings:
             console.print(mapping_table(result.proposed.mappings))
         for u in result.proposed.unmappable if result.proposed else []:
             console.print(f"[red]✗ {safe(u.target)}[/red]: {safe(u.reason)}")

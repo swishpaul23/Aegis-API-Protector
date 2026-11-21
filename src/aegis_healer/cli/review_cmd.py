@@ -28,8 +28,6 @@ def _show(item: PendingPatch, details: bool = False) -> None:
     title = f"Pending fix #{item.id} · {item.model_key} · built on v{item.base_version}"
     if item.kind == "meaning":
         console.print(findings_table(item.findings, title=title))
-        if item.patch.mappings:
-            console.print(mapping_table(item.patch.mappings, title="Proposed fix"))
     else:
         console.print(mapping_table(item.patch.mappings, title=title))
     for u in item.patch.unmappable:
