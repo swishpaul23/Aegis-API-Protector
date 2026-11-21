@@ -34,15 +34,14 @@ def _mask_str(s: str) -> str:
 
 
 def is_data_like_key(k: Any) -> bool:
-    """Keys that look like data rather than field names (emails, ids, free text)."""
+    """Keys that look like data rather than field names (emails, ids, free text).
+
+    Field names with a digit or two (`streetLine1`, `oauth2_token`) stay visible; keys
+    that aren't identifiers, or carry 3+ digits (`a3f1b8c21001`, `usr_8812`), are data.
+    """
     if not isinstance(k, str):
         return True
-    return (
-        "@" in k
-        or any(c.isspace() for c in k)
-        or (len(k) > 8 and any(c.isdigit() for c in k))
-        or _is_datetime(k)
-    )
+    return is_data_like_segment(k) or sum(c.isdigit() for c in k) >= 3
 
 
 _data_like_key = is_data_like_key  # backwards-compatible private name

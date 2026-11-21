@@ -239,3 +239,8 @@ def test_segment_predicate_and_missing_never_masked():
     assert mask_path("contact.addressLine2") == "contact.addressLine2"
     rep = mask_report(DriftReport(missing=["oauth2_token"], unexpected=["m.bob@x.io"]))
     assert rep.missing == ["oauth2_token"] and rep.unexpected == ["m.<key>"]
+
+
+def test_field_names_with_a_digit_stay_visible():
+    out = mask_value({"streetLine1": "742 Evergreen", "oauth2_token": "t", "usr_8812abc": "x"})
+    assert set(out) == {"streetLine1", "oauth2_token", "<key 2>"}
