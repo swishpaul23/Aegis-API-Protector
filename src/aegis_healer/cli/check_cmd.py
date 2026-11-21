@@ -155,6 +155,11 @@ def check(
                 else ""
             )
             console.print(f"[yellow]Pending: {safe(result.message)}{where}[/yellow]")
+        elif result.message.startswith("Cannot heal without changing your model") and (
+            result.proposed and result.proposed.unmappable
+        ):
+            # The reasons were just listed per field; don't repeat them.
+            console.print("[red]✗ Cannot heal without changing your model (see above).[/red]")
         else:
             console.print(f"[red]✗ {safe(result.message)}[/red]")
     u = result.usage

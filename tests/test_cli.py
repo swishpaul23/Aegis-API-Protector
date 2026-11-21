@@ -277,3 +277,16 @@ def test_fetch_other_error_shows_type_only(env, monkeypatch):
     monkeypatch.setattr(check_mod, "fetch_json", boom)
     r = run("check", "http://x/api?api_key=SECRET123", "--model", MODEL)
     assert r.exit_code == 2 and "SECRET123" not in r.output and "ValueError" in r.output
+
+
+def test_unmappable_reason_printed_once(env):
+    from aegis_healer.types import MappingPatch, Unmappable
+
+    env[1].update(
+        payload=V2,
+        patch=MappingPatch(unmappable=[Unmappable(target="user_id", reason="REASON-XYZ")]),
+    )
+    r = run("check", "http://x", "--model", MODEL)
+    assert r.exit_code == 2, r.output
+    assert r.output.count("REASON-XYZ") == 1
+    assert "Cannot heal without changing your model" in r.output
