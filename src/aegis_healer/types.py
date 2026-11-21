@@ -103,3 +103,15 @@ class PatchCheck(BaseModel):
 class MatchResult(BaseModel):
     resolved: list[FieldMapping] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)
+
+
+class MeaningFinding(BaseModel):
+    """A batch value distribution that no longer matches the learned baseline."""
+
+    path: str
+    kind: Literal["scale", "timezone", "category"]
+    detail: str
+    suggested_scale: float | None = None
+    baseline_n: int
+    batch_n: int
+    new_categories: list[str] = Field(default_factory=list)
