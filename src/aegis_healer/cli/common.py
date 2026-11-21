@@ -134,7 +134,7 @@ def get_store(db: str | None) -> FileStore:
 
 
 def describe(m: FieldMapping) -> str:
-    scale = f"x{m.scale:g}" if m.scale is not None else ""
+    scale = f"x{m.scale:.12g}" if m.scale is not None else ""
     if m.transform == "value_map":
         base = f"value_map {json.dumps(m.value_map)}"
     elif m.transform == "concat":

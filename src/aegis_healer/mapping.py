@@ -90,7 +90,12 @@ def apply_transform(value: Any, transform: Transform | str) -> Any:
 def _apply_scale(value: Any, scale: float) -> int | float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError("scale needs a number")
-    result = value * scale
+    try:
+        if not math.isfinite(value):
+            raise ValueError("value is not finite")
+        result = value * scale
+    except OverflowError:
+        raise ValueError("scaled value is not finite") from None
     if not math.isfinite(result):
         raise ValueError("scaled value is not finite")
     if isinstance(value, int) and isinstance(result, float) and result.is_integer():

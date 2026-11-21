@@ -79,3 +79,20 @@ def test_agent_scale_is_out_of_scope():
     bad = MappingPatch(mappings=[FM(source="cost", target="price", scale=100)])
     assert scope_errors(req, ok) == []
     assert "scale is not allowed in agent proposals" in scope_errors(req, bad)
+
+
+def test_scale_huge_int_overflow_is_value_error():
+    with pytest.raises(ValueError, match="scaled value is not finite"):
+        map_value({"a": 10**400}, FM(source="a", target="b", scale=0.01))
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_scale_rejects_non_finite_input(bad):
+    with pytest.raises(ValueError, match="value is not finite"):
+        map_value({"a": bad}, FM(source="a", target="b", scale=2))
+
+
+def test_describe_scale_not_truncated():
+    from aegis_healer.cli.common import describe
+
+    assert describe(FM(source="a", target="b", scale=0.0123456789)) == "x0.0123456789"
