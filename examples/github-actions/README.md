@@ -39,6 +39,14 @@ If your model needs installed dependencies, add a step before the check, e.g.
 | 2 | Job fails: drift Aegis can't fix. Edit your model by hand. |
 | other | Job fails with the unexpected exit code. |
 
+## Meaning-drift fixes
+
+When the API keeps its field names but changes what the values mean (dollars become cents),
+the review PR holds a meaning fix. If it has a suggested scale, **merging the PR approves it**
+like any other fix, and the blocked records can then be replayed. **"Keep data"** (the new
+values are the new normal) can't be done by merging: run `aegis review --keep ID` locally,
+commit the updated `.aegis/profiles/`, and close the PR.
+
 ## Closing a review PR
 
 Closing means "not this fix". It does not remember the decision: the next scheduled run

@@ -18,7 +18,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from aegis_healer.store.files import FileStore
-from aegis_healer.types import FieldMapping
+from aegis_healer.types import FieldMapping, MeaningFinding
 
 console = Console()
 
@@ -161,4 +161,15 @@ def mapping_table(mappings: list[FieldMapping], title: str | None = None) -> Tab
             f"[{style}]{m.confidence:.2f}[/{style}]",
             safe(m.reason),
         )
+    return table
+
+
+def findings_table(findings: list[MeaningFinding], title: str | None = None) -> Table:
+    """What changed in the data's meaning: field, kind, detail (no record values)."""
+    table = Table(title=safe(title) if title else None, title_justify="left", header_style="bold")
+    for col in ("Field", "Kind", "Detail", "Suggested fix"):
+        table.add_column(col)
+    for f in findings:
+        fix = f"x{f.suggested_scale:.12g}" if f.suggested_scale is not None else "-"
+        table.add_row(safe(f.path), safe(f.kind), safe(f.detail), safe(fix))
     return table

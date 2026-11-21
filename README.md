@@ -34,12 +34,13 @@ result.raise_for_status()
 
 ```bash
 aegis init   https://api.example.com/users --name User   # generate models.py from a live response
-aegis check  https://api.example.com/users --model models:User [--threshold 0.9] [-H "Authorization: Bearer ..."] [--privacy masked] [--max-llm-calls 10]
-aegis review [--approve ID] [--reject ID]                 # interactive by default
+aegis check  https://api.example.com/users --model models:User [--threshold 0.9] [-H "Authorization: Bearer ..."] [--privacy masked] [--max-llm-calls 10] [--no-meaning]
+aegis review [--approve ID] [--reject ID] [--keep ID]     # interactive by default
 aegis history models.User
 aegis rollback models.User 2
 aegis runs [--limit N]                                    # run log
 aegis replay --model models:User [--batch ID] [--out FILE]
+aegis profile models.User                                 # learned baseline per field
 ```
 
 `aegis check` exits `0` (ok or healed), `1` (fix pending review) or `2` (failed), so it
@@ -102,13 +103,72 @@ Pipeline host before its next run, and don't let both write mappings at the same
 
 ## Human review
 
-- **CLI**: `aegis review` (interactive), or `aegis review --approve ID` / `--reject ID`.
+- **CLI**: `aegis review` (interactive), or `aegis review --approve ID` / `--reject ID`
+  (and `--keep ID` for meaning fixes, see Meaning drift).
 - **Webhook**: get pinged when a fix goes pending (see Notifications). `AEGIS_WEBHOOK_URL`
   is read by the `aegis` CLI only; library and `Pipeline` users pass
   `Healer(on_pending=webhook_notifier(url))`.
 - **Pull requests**: `examples/github-actions` runs `aegis check` on a schedule and opens a
   PR per fix. Merging the PR is the approval; closing it means "not this fix" (the next
   run proposes again unless you change the model or set `AEGIS_PAUSED=true`).
+
+## Meaning drift
+
+Same field name, same type, different meaning: `amount` goes from dollars to cents, or
+timestamps go from UTC to local time. Schema validation passes, so this is the quiet kind of
+break. Aegis learns a baseline per field from healthy runs (aggregate counts only: size
+buckets, decimal places, timezone classes, short lowercase or uppercase category words; never
+raw numbers, text, IDs or dates; stored in `.aegis/profiles/`, see `aegis profile MODEL_KEY`)
+and compares each new batch to it. No LLM is involved.
+
+It catches:
+
+- **Scale**: a number field about 100x or 1000x bigger or smaller (dollars/cents,
+  seconds/milliseconds, 0.05/5 percent). Suggested fix: a `scale` on the mapping.
+- **Timezone**: a datetime field whose dominant timezone class changed (UTC to offset or
+  naive, or any other switch).
+- **Category**: a category field that suddenly uses new values (`active` becomes `A`).
+
+A field needs 20 records of history before it is checked, and a batch needs 5 records.
+A run with findings never updates the baseline, so it can't learn the drift. The affected
+records are blocked and quarantined, and a pending fix is created (exit code 1). Meaning fixes
+are never auto-applied, whatever the threshold.
+
+Choose what happens per field in `.aegis/config.toml` (`block` is the default):
+
+```toml
+[meaning]
+default = "block"          # block | flag | off
+
+[meaning.fields]
+amount = "block"                 # a bare field path
+"app.models.Payment.note" = "flag"   # model key + path wins over a bare path
+created_at = "off"
+```
+
+`block` quarantines the records, `flag` loads them but still opens the pending fix and prints
+the finding, `off` skips the field. `aegis check --no-meaning` skips all meaning checks for
+one run.
+
+Resolve a meaning fix in `aegis review`:
+
+- **[a]pply fix**: the suggested scale becomes a mapping (it composes with renames), then
+  `aegis replay` releases the blocked records converted. Only offered when there is a
+  suggested fix.
+- **[k]eep data** (or `aegis review --keep ID`): the new values are the new normal. The
+  baseline for the field is reset and rebuilds from the next runs; the blocked records can
+  then be replayed as they are. Use this when the API really changed and your model expects it.
+- **[r]eject** or **[s]kip** as for any fix. Blocked records stay quarantined.
+
+Known limitations:
+
+- Timezone and category drift have no automatic fix: keep the data, or fix it upstream.
+- A field needs 20 records of history before it is checked.
+- Records quarantined for *schema* drift are not meaning-checked when replayed after approval.
+- Small batches (5 records) against a very wide baseline can occasionally false-alarm; set
+  noisy fields to `flag` or `off`.
+
+See `examples/meaning` for a runnable dollars-to-cents demo.
 
 ## Privacy
 
@@ -230,7 +290,7 @@ Without an API key, Aegis runs in rules-only mode.
 - Drift *inside* lists of objects (`items[].qty`) is detected as failed records but not
   repaired; lists are treated as single values.
 - Models with `extra="forbid"` fail when the API adds a field; there's no "drop" mapping yet.
-- Same-name-different-meaning drift (cents vs dollars) isn't detected yet (see roadmap).
+- Meaning drift detection is statistical, see its limits under Meaning drift.
 
 ## Development
 
@@ -251,7 +311,6 @@ The Phase 1 Docker/FastAPI/Postgres build is kept for reference in `legacy/phase
 
 ## Roadmap
 
-- Meaning drift: same field name, different meaning (dollars → cents, UTC → local time)
 - Shared store backends (Postgres) and run-result sinks (Databricks Delta, S3 + Athena)
 
 ## License

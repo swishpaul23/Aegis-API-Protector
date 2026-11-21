@@ -14,6 +14,7 @@ from aegis_healer.cli.common import (
     error_text,
     fetch_error_text,
     fetch_json,
+    findings_table,
     get_store,
     load_model,
     mapping_table,
@@ -37,6 +38,7 @@ def build_healer(
     privacy: str = "masked",
     max_llm_calls: int | None = 10,
     on_pending: Callable[[PendingNotice], None] | None = None,
+    meaning: bool | None = None,
 ) -> Healer:
     """The single place the CLI builds a Healer (tests monkeypatch this)."""
     return Healer(
@@ -46,6 +48,7 @@ def build_healer(
         privacy=cast(Privacy, privacy),
         max_llm_calls=max_llm_calls,
         on_pending=on_pending,
+        meaning=meaning,
     )
 
 
@@ -80,6 +83,9 @@ def check(
     max_llm_calls: Annotated[
         int, typer.Option(min=0, help="Max LLM calls for this run (0 = rules only)")
     ] = 10,
+    no_meaning: Annotated[
+        bool, typer.Option("--no-meaning", help="Skip the meaning-drift checks (scale, timezone)")
+    ] = False,
 ) -> None:
     """Check an API against your model. Exit 0 ok/healed, 1 pending review, 2 failed."""
     if privacy not in PRIVACY_MODES:
@@ -105,6 +111,7 @@ def check(
         privacy=privacy,
         max_llm_calls=max_llm_calls,
         on_pending=_env_notifier(),
+        meaning=False if no_meaning else None,
     )
     if healer.proposer is None:
         console.print("[dim]Agent disabled (no ANTHROPIC_API_KEY): rules only.[/dim]")
@@ -114,6 +121,8 @@ def check(
         console.print(f"[red]✗ Could not read records:[/red] {safe(error_text(exc))}")
         raise typer.Exit(2) from exc
 
+    if result.findings:
+        console.print(findings_table(result.findings, title="Meaning drift"))
     if result.status == "ok":
         console.print(f"[green]✓ No drift.[/green] {len(result.records)} record(s) valid.")
     else:
