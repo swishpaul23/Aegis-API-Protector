@@ -14,6 +14,9 @@ from aegis_healer.agent.privacy import Privacy, has_data_like_segment, mask_path
 from aegis_healer.detect import detect_drift, soft_missing
 from aegis_healer.mapping import apply_mappings
 from aegis_healer.matcher import match
+from aegis_healer.meaning.config import MeaningConfig, load_config
+from aegis_healer.meaning.detect import detect
+from aegis_healer.meaning.profile import classify, load_profile, observe, save_profile
 from aegis_healer.notify import PendingNotice
 from aegis_healer.paths import flatten, get_path, model_key, model_paths
 from aegis_healer.quarantine import Quarantine
@@ -23,6 +26,7 @@ from aegis_healer.types import (
     DriftReport,
     FieldMapping,
     MappingPatch,
+    MeaningFinding,
     PatchCheck,
     TypeMismatch,
     Unmappable,
@@ -52,6 +56,7 @@ class HealResult(BaseModel):
     message: str = ""
     usage: Usage = Field(default_factory=Usage)
     quarantine_id: str | None = None
+    findings: list[MeaningFinding] = Field(default_factory=list)
     pending_is_new: bool = False  # internal: False when an existing pending fix was reused
 
     def raise_for_status(self) -> HealResult:
@@ -87,6 +92,17 @@ def _mapping_sig(mappings: list[FieldMapping]) -> frozenset[tuple]:
         )
         for m in mappings
     )
+
+
+def _finding_sig(findings: list[MeaningFinding]) -> frozenset[tuple]:
+    return frozenset((f.path, f.kind, f.suggested_scale) for f in findings)
+
+
+def _usable(record: dict[str, Any], path: str) -> bool:
+    try:
+        return classify(get_path(record, path))[0] != "skip"
+    except KeyError:
+        return False
 
 
 def mask_report(report: DriftReport) -> DriftReport:
@@ -127,6 +143,7 @@ class Healer:
         max_llm_calls: int | None = 10,
         quarantine: bool = True,
         on_pending: Callable[[PendingNotice], None] | None = None,
+        meaning: MeaningConfig | bool | None = None,
     ) -> None:
         if max_llm_calls is not None and max_llm_calls < 0:
             raise ValueError("max_llm_calls must be >= 0 or None")
@@ -148,6 +165,14 @@ class Healer:
         self.max_llm_calls = max_llm_calls
         self.quarantine = quarantine
         self.on_pending = on_pending
+        root = getattr(self.store, "root", None)
+        self.meaning_config: MeaningConfig | None
+        if meaning is False:
+            self.meaning_config = None
+        elif isinstance(meaning, MeaningConfig):
+            self.meaning_config = meaning
+        else:  # None/True: the project's config; a broken config file fails loudly here
+            self.meaning_config = load_config(root) if root is not None else MeaningConfig()
         if quarantine and persist and getattr(self.store, "root", None) is None:
             logging.getLogger("aegis_healer").warning(
                 "quarantine is enabled but the store has no root folder: "
@@ -205,6 +230,8 @@ class Healer:
         base_version = self.store.active_version(key)
         wanted = _mapping_sig(proposed.mappings)
         for item in self.store.list_pending(key):
+            if item.kind != "schema":
+                continue  # meaning fixes are never reused for schema drift
             if item.base_version == base_version and _mapping_sig(item.patch.mappings) == wanted:
                 return item.id, False
         # Pending files are committed to git: never store data-like keys, whatever the mode.
@@ -229,7 +256,8 @@ class Healer:
         wanted = set(unresolved)
         targets = wanted | {m.target for m in resolved}
         for item in items:
-            if item.base_version != base_version:
+            # A meaning fix must never be picked up (and auto-applied) as a schema fix.
+            if item.kind != "schema" or item.base_version != base_version:
                 continue
             maps = [m for m in item.patch.mappings if m.target in targets]
             if not wanted <= {m.target for m in maps}:
@@ -287,6 +315,8 @@ class Healer:
         records_path: str | None = None,
     ) -> HealResult:
         result, failing, count = self._validate(payload, model, records_path)
+        if self.meaning_config is not None and result.status in ("ok", "healed"):
+            self._check_meaning(payload, model, records_path, result, failing)
         if self.privacy != "full" and result.report is not None:
             result.report = mask_report(result.report)
         if self.persist:
@@ -302,7 +332,7 @@ class Healer:
         mappings = result.proposed.mappings if result.proposed else []
         agent_conf = [m.confidence for m in mappings if m.origin == "agent"]
         key = model_key(model)
-        fields = sorted({m.target for m in mappings})
+        fields = sorted({m.target for m in mappings} | {f.path for f in result.findings})
         notice = PendingNotice(
             model_key=key,
             pending_id=result.pending_id,
@@ -318,6 +348,112 @@ class Healer:
             logging.getLogger("aegis_healer").warning(
                 "pending notification failed: %s", type(exc).__name__
             )
+
+    # ── meaning drift ───────────────────────────────────────
+    def _check_meaning(
+        self,
+        payload: Any,
+        model: type[BaseModel],
+        records_path: str | None,
+        result: HealResult,
+        failing: list[dict[str, Any]],
+    ) -> None:
+        """After a schema-clean run: block or flag records whose values changed meaning."""
+        root = getattr(self.store, "root", None)
+        config = self.meaning_config
+        if root is None or config is None or not result.records:
+            return
+        log = logging.getLogger("aegis_healer")
+        key = model_key(model)
+        active = self.store.get_active(key)
+        in_effect = active if self.persist else merge(active, result.applied)
+        pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for raw in self._extract(payload, records_path):
+            try:
+                mapped = apply_mappings(raw, in_effect)
+                model.model_validate(mapped)
+            except (ValidationError, ValueError, KeyError):
+                continue
+            if not soft_missing(mapped, model):
+                pairs.append((raw, mapped))
+        if len(pairs) != len(result.records):
+            log.warning("meaning check skipped: could not rebuild the validated records")
+            return
+        mapped_records = [mapped for _, mapped in pairs]
+
+        profile = load_profile(root, key)
+        findings = [
+            f
+            for f in detect(profile, mapped_records, model)
+            if config.policy_for(key, f.path) != "off"
+        ]
+        if not findings:
+            if self.persist:
+                observe(profile, mapped_records, model)
+                try:
+                    save_profile(root, profile)
+                except OSError as exc:  # a baseline write must never break validation
+                    log.warning("could not save meaning profile: %s", type(exc).__name__)
+            return  # the baseline never learns from a drifted batch
+
+        blocked_paths = {f.path for f in findings if config.policy_for(key, f.path) == "block"}
+        kept: list[Any] = []
+        blocked: list[dict[str, Any]] = []
+        for obj, (raw, mapped) in zip(result.records, pairs, strict=True):
+            if any(_usable(mapped, p) for p in blocked_paths):
+                blocked.append(raw)
+            else:
+                kept.append(obj)
+        # Every record of an ok/healed run validated: only the blocked ones are quarantined.
+        failing[:] = blocked
+
+        fixes: list[FieldMapping] = []
+        for f in findings:
+            if f.suggested_scale is None:
+                continue
+            current = next((m for m in in_effect if m.target == f.path), None)
+            update = {
+                "scale": f.suggested_scale,
+                "origin": "deterministic",
+                "confidence": 1.0,
+                "reason": f.detail,
+            }
+            if current is not None:
+                fixes.append(current.model_copy(update=update))
+            else:
+                fixes += _rebase([FieldMapping(source=f.path, target=f.path, **update)], in_effect)
+        proposed = MappingPatch(mappings=fixes)
+        pending_id, is_new = (
+            self._meaning_pending_for(key, proposed, findings) if self.persist else (None, False)
+        )
+        result.records = kept
+        result.status = "pending"
+        result.findings = findings
+        result.proposed = proposed
+        result.pending_id = pending_id
+        result.pending_is_new = is_new
+        result.message = (
+            f"Meaning drift needs review: {', '.join(sorted({f.path for f in findings}))}"
+        )
+
+    def _meaning_pending_for(
+        self, key: str, proposed: MappingPatch, findings: list[MeaningFinding]
+    ) -> tuple[int, bool]:
+        """Reuse an open meaning fix for the same base version and the same findings."""
+        base_version = self.store.active_version(key)
+        wanted = _finding_sig(findings)
+        for item in self.store.list_pending(key):
+            if (
+                item.kind == "meaning"
+                and item.base_version == base_version
+                and _finding_sig(item.findings) == wanted
+            ):
+                return item.id, False
+        # No report data: pending files are committed to git.
+        pid = self.store.add_pending(
+            key, proposed, DriftReport(), kind="meaning", findings=findings
+        )
+        return pid, True
 
     def _quarantine(
         self, model: type[BaseModel], result: HealResult, failing: list[dict[str, Any]]

@@ -68,6 +68,8 @@ def run_message(status: str, message: str, privacy: Privacy) -> str:
     if privacy == "full":
         return message[:MAX_MESSAGE]
     if status == "pending":
+        if message.startswith("Meaning drift needs review"):
+            return "meaning_drift"
         return "pending_review"
     if status != "failed":
         return ""
