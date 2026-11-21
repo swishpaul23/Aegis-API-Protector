@@ -13,7 +13,7 @@ class Address(BaseModel):
 
 class UserProfile(BaseModel):
     model_config = ConfigDict(strict=True)
-    user_id: int  # step 4 of the demo: change to `int | str`
+    user_id: int | str
     email_address: str
     full_name: str
     signup_date: str

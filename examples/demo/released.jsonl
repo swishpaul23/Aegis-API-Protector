@@ -1,0 +1,2 @@
+{"user_id": "a3f1-b8c2-1001", "email_address": "alice@example.com", "full_name": "Alice Johnson", "signup_date": "2023-06-15T00:00:00Z", "is_active": true, "address": {"street": "742 Evergreen Terrace", "city": "Springfield", "state": "IL", "zip_code": "62704"}}
+{"user_id": "a3f1-b8c2-1002", "email_address": "bob@example.com", "full_name": "Bob Smith", "signup_date": "2024-01-22T00:00:00Z", "is_active": false, "address": {"street": "123 Maple Drive", "city": "Shelbyville", "state": "IL", "zip_code": "62565"}}
