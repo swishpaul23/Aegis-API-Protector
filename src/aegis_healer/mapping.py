@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -90,6 +91,8 @@ def _apply_scale(value: Any, scale: float) -> int | float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError("scale needs a number")
     result = value * scale
+    if not math.isfinite(result):
+        raise ValueError("scaled value is not finite")
     if isinstance(value, int) and isinstance(result, float) and result.is_integer():
         return int(result)
     return result

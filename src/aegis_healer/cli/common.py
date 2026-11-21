@@ -134,11 +134,16 @@ def get_store(db: str | None) -> FileStore:
 
 
 def describe(m: FieldMapping) -> str:
+    scale = f"x{m.scale:g}" if m.scale is not None else ""
     if m.transform == "value_map":
-        return f"value_map {json.dumps(m.value_map)}"
-    if m.transform == "concat":
-        return f"concat (sep {m.separator!r})"
-    return "-" if m.transform == "none" else m.transform
+        base = f"value_map {json.dumps(m.value_map)}"
+    elif m.transform == "concat":
+        base = f"concat (sep {m.separator!r})"
+    elif m.transform == "none":
+        base = "" if scale else "-"
+    else:
+        base = m.transform
+    return f"{base} {scale}".strip() if scale else base
 
 
 def mapping_table(mappings: list[FieldMapping], title: str | None = None) -> Table:

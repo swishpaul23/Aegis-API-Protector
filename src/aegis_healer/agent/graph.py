@@ -34,6 +34,8 @@ def scope_errors(req: ProposalRequest, patch: MappingPatch) -> list[str]:
         if u.target not in req.unresolved:
             errors.append(f"unmappable target '{u.target}' was not an unresolved field")
     for m in patch.mappings:
+        if m.scale is not None:
+            errors.append("scale is not allowed in agent proposals")
         if m.target not in req.unresolved:
             errors.append(f"target '{m.target}' was not an unresolved field")
         for s in m.sources:

@@ -33,3 +33,49 @@ def test_mapping_sig_includes_scale():
     b = [FM(source="a", target="b", scale=100)]
     c = [FM(source="a", target="b")]
     assert len({_mapping_sig(a), _mapping_sig(b), _mapping_sig(c)}) == 3
+
+
+def test_scale_constructs_fractional():
+    assert FM(source="a", target="b", scale=0.5).scale == 0.5
+
+
+def test_scale_float_input_stays_float():
+    out = map_value({"a": 3.0}, FM(source="a", target="b", scale=2))
+    assert out == 6.0 and type(out) is float
+
+
+def test_scale_rejects_non_finite_result():
+    with pytest.raises(ValueError, match="scaled value is not finite"):
+        map_value({"a": 1e300}, FM(source="a", target="b", scale=1e300))
+
+
+def test_describe_shows_scale():
+    from aegis_healer.cli.common import describe, mapping_table
+
+    assert describe(FM(source="a", target="b", scale=0.01)) == "x0.01"
+    assert describe(FM(source="a", target="b", transform="to_int", scale=0.01)) == "to_int x0.01"
+    vm = FM(source="a", target="b", transform="value_map", value_map={"x": 1}, scale=100)
+    assert describe(vm) == 'value_map {"x": 1} x100'
+    cc = FM(source=["a", "c"], target="b", transform="concat", scale=2)
+    assert describe(cc) == "concat (sep ' ') x2"
+    assert describe(FM(source="a", target="b")) == "-"
+    cells = mapping_table([FM(source="a", target="b", transform="to_int", scale=0.01)]).columns[2]
+    assert list(cells.cells) == ["to_int x0.01"]
+
+
+def test_agent_scale_is_out_of_scope():
+    from aegis_healer.agent import ProposalRequest
+    from aegis_healer.agent.graph import scope_errors
+    from aegis_healer.types import MappingPatch
+
+    req = ProposalRequest(
+        model_name="User",
+        model_schema={"price": "int"},
+        unresolved=["price"],
+        candidates={"cost": "int"},
+        samples=[{"cost": 1}],
+    )
+    ok = MappingPatch(mappings=[FM(source="cost", target="price")])
+    bad = MappingPatch(mappings=[FM(source="cost", target="price", scale=100)])
+    assert scope_errors(req, ok) == []
+    assert "scale is not allowed in agent proposals" in scope_errors(req, bad)
