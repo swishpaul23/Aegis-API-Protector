@@ -263,3 +263,13 @@ def test_unrelated_changes_in_two_schemas_are_kept(tmp_path: Path):
     r = _two_ref_repo(tmp_path, old, new)
     out = mine(Source("fx", "u", SPEC_PATH, [("o", "HEAD")]), r)
     assert sorted(c.source["schema"] for c in out) == ["A", "B"]
+
+
+def test_sources_have_pairs_and_safe_refs():
+    assert SOURCES
+    for s in SOURCES:
+        assert s.pairs, f"{s.api} {s.spec_path}: no pairs"
+        for ref in (r for pair in s.pairs for r in pair):
+            assert ref and not ref.startswith("-"), f"{s.api}: unsafe ref {ref!r}"
+        assert not s.api.startswith("-") and not s.spec_path.startswith("-")
+    assert len([s for s in SOURCES if s.api == "twilio"]) > 1

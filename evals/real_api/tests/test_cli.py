@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import pytest
@@ -321,3 +322,134 @@ def test_rules_only_run_report_says_agent_not_run(tmp_path):
         p.unlink()
     assert cli.main(["report", str(run_dir), "--cases", str(cases), "--out", str(out)]) == 0
     assert "**Rules + agent: not run.**" in next(run_dir.glob("*.md")).read_text(encoding="utf-8")
+
+
+def test_mine_handles_several_sources_with_the_same_api(tmp_path, monkeypatch, capsys):
+    cases = tmp_path / "cases"
+    srcs = [
+        Source("tw", "https://x/repo", "a.json", [("a", "b")]),
+        Source("tw", "https://x/repo", "b.json", [("a", "b")]),
+        Source("other", "https://x/repo", "c.json", [("a", "b")]),
+    ]
+    monkeypatch.setattr(cli, "SOURCES", srcs)
+    clones = []
+    monkeypatch.setattr(cli, "clone_repo", lambda url, d: clones.append(url))
+    mined = {"a.json": SEEDS[0], "b.json": SEEDS[1], "c.json": SEEDS[2]}
+    monkeypatch.setattr(cli, "mine", lambda s, d: [mined[s.spec_path]])
+    assert cli.main(["mine", "--api", "tw", "--cases", str(cases)]) == 0
+    assert {c.id for c in load_cases(cases)} == {SEEDS[0].id, SEEDS[1].id}
+    assert clones == ["https://x/repo"]  # one clone for both sources
+    assert capsys.readouterr().out.count("tw: written 1") == 2
+
+
+# --- select -------------------------------------------------------------------------------
+
+
+def _hash_key(case_id: str) -> str:
+    return hashlib.sha256(case_id.encode()).hexdigest()
+
+
+def _mk(case_id, api, expected="repair", status="drafted"):
+    base = SEEDS[2] if expected == "refuse" else SEEDS[0]
+    return base.model_copy(
+        update={"id": case_id, "api": api, "label_status": status, "expected": expected}
+    )
+
+
+def _select_dir(tmp_path):
+    """api a: 5 repair + 3 refuse drafted, 2 confirmed; api b: 2 repair drafted."""
+    d = tmp_path / "cases"
+    for i in range(5):
+        save_case(_mk(f"a-r{i}", "a"), d)
+    for i in range(3):
+        save_case(_mk(f"a-x{i}", "a", "refuse"), d)
+    for i in range(2):
+        save_case(_mk(f"a-c{i}", "a", status="confirmed"), d)
+    for i in range(2):
+        save_case(_mk(f"b-r{i}", "b"), d)
+    return d
+
+
+def _top(d):
+    return {c.id for c in load_cases(d)}
+
+
+def _pooled(d):
+    return {p.stem for p in (d / "pool").glob("*.json")}
+
+
+def _sel(d, *extra):
+    return cli.main(
+        ["select", "--cases", str(d), "--repair-per-api", "2", "--refuse-per-api", "1", *extra]
+    )
+
+
+def test_select_respects_quotas_per_api(tmp_path, capsys):
+    d = _select_dir(tmp_path)
+    assert _sel(d) == 0
+    kept = {c.id: c for c in load_cases(d) if c.label_status == "drafted"}
+    for api, n_rep, n_ref in (("a", 2, 1), ("b", 2, 0)):
+        mine = [c for c in kept.values() if c.api == api]
+        assert sum(c.expected == "repair" for c in mine) == n_rep
+        assert sum(c.expected == "refuse" for c in mine) == n_ref
+    assert len(_pooled(d)) == 3 + 2 + 0  # a: 3 repair + 2 refuse pooled; b: none
+    out = capsys.readouterr().out
+    assert "a" in out and "pooled" in out
+
+
+def test_select_leaves_confirmed_untouched(tmp_path):
+    d = _select_dir(tmp_path)
+    before = {p.name: p.read_bytes() for p in d.glob("a-c*.json")}
+    _sel(d)
+    assert {p.name: p.read_bytes() for p in d.glob("a-c*.json")} == before
+    assert not _pooled(d) & {"a-c0", "a-c1"}
+
+
+def test_select_is_idempotent(tmp_path, capsys):
+    d = _select_dir(tmp_path)
+    _sel(d)
+    snap = (_top(d), _pooled(d))
+    capsys.readouterr()
+    assert _sel(d) == 0
+    assert (_top(d), _pooled(d)) == snap
+    assert "pooled 0" in capsys.readouterr().out
+
+
+def test_select_orders_by_sha256_of_id(tmp_path):
+    d = tmp_path / "cases"
+    ids = [f"ord-{i}" for i in range(6)]
+    for i in ids:
+        save_case(_mk(i, "o"), d)
+    assert cli.main(["select", "--cases", str(d), "--repair-per-api", "3"]) == 0
+    expect = set(sorted(ids, key=_hash_key)[:3])
+    assert _top(d) == expect
+    assert _pooled(d) == set(ids) - expect
+    assert expect != set(ids[:3])  # the test would be vacuous if hash order == name order
+
+
+def test_select_never_reads_run_results(tmp_path):
+    d = _select_dir(tmp_path)
+    out = tmp_path / "results"
+    out.mkdir()
+    (out / "junk.json").write_text("not json")
+    assert _sel(d, "--cases", str(d)) == 0  # no --out option, results dir is never consulted
+
+
+def test_select_warns_when_one_api_exceeds_40_percent(tmp_path, capsys):
+    d = _select_dir(tmp_path)  # kept: a 3, b 2 -> a is 60%
+    assert _sel(d) == 0
+    cap = capsys.readouterr()
+    assert "WARNING" in cap.out + cap.err and "a" in (cap.out + cap.err)
+    assert "60.0%" in cap.out
+
+
+def test_pool_is_excluded_from_load_cases_and_review_render(tmp_path):
+    d = _select_dir(tmp_path)
+    _sel(d)
+    pooled = _pooled(d)
+    assert pooled and not (_top(d) & pooled)
+    review = tmp_path / "REVIEW.md"
+    assert cli.main(["review", "render", "--cases", str(d), "--review", str(review)]) == 0
+    text = review.read_text(encoding="utf-8")
+    assert all(f"`{i}`" not in text for i in pooled)
+    assert all(f"`{c.id}`" in text for c in load_cases(d) if c.label_status == "drafted")

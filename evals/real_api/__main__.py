@@ -1,9 +1,10 @@
-"""CLI: python -m evals.real_api {mine|review|run|report}."""
+"""CLI: python -m evals.real_api {mine|select|review|run|report}."""
 
 from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import sys
@@ -42,22 +43,68 @@ def _cmd_mine(args: argparse.Namespace) -> int:
         print(f"no such api: {args.api}", file=sys.stderr)
         return 2
     cases_dir = Path(args.cases)
-    for src in sources:
-        if not src.pairs:
-            print(f"{src.api}: no pairs configured, skipping")
-            continue
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp) / "repo"
-            clone_repo(src.repo_url, repo)
-            found = mine(src, repo)
-        written = skipped = 0
-        for case in found:
-            if (cases_dir / f"{case.id}.json").exists():
-                skipped += 1  # never clobber confirmed labels
+    with tempfile.TemporaryDirectory() as tmp:
+        clones: dict[str, Path] = {}  # several sources (e.g. twilio) share one repo: clone once
+        for src in sources:
+            if not src.pairs:
+                print(f"{src.api}: no pairs configured, skipping")
                 continue
-            save_case(case, cases_dir)
-            written += 1
-        print(f"{src.api}: written {written}, skipped-existing {skipped}")
+            if src.repo_url not in clones:
+                clones[src.repo_url] = Path(tmp) / f"repo{len(clones)}"
+                clone_repo(src.repo_url, clones[src.repo_url])
+            found = mine(src, clones[src.repo_url])
+            written = skipped = 0
+            for case in found:
+                if (cases_dir / f"{case.id}.json").exists():
+                    skipped += 1  # never clobber confirmed labels
+                    continue
+                save_case(case, cases_dir)
+                written += 1
+            print(f"{src.api}: written {written}, skipped-existing {skipped}")
+    return 0
+
+
+def _id_key(case_id: str) -> str:
+    return hashlib.sha256(case_id.encode()).hexdigest()
+
+
+SHARE_WARN = 0.40
+
+
+def _cmd_select(args: argparse.Namespace) -> int:
+    """Cap drafted cases per api by sha256(id) order; the rest go to <cases>/pool/.
+
+    Looks only at case files (id, api, expected, label_status), never at run results.
+    """
+    cases_dir = Path(args.cases)
+    quota = {"repair": args.repair_per_api, "refuse": args.refuse_per_api}
+    drafted = [c for c in load_cases(cases_dir) if c.label_status == "drafted"]
+    stats: dict[str, dict[str, int]] = {}
+    for api in sorted({c.api for c in drafted}):
+        st = stats[api] = {"repair": 0, "refuse": 0, "pooled": 0}
+        mine_ = sorted((c for c in drafted if c.api == api), key=lambda c: _id_key(c.id))
+        for c in mine_:
+            if st[c.expected] < quota[c.expected]:
+                st[c.expected] += 1
+                continue
+            pool = cases_dir / "pool"
+            pool.mkdir(exist_ok=True)
+            (cases_dir / f"{c.id}.json").replace(pool / f"{c.id}.json")
+            st["pooled"] += 1
+    total = sum(s["repair"] + s["refuse"] for s in stats.values())
+    for api, st in stats.items():
+        kept = st["repair"] + st["refuse"]
+        share = kept / total if total else 0.0
+        print(
+            f"{api}: kept repair {st['repair']}, kept refuse {st['refuse']}, "
+            f"pooled {st['pooled']}; share {share:.1%}"
+        )
+        if share > SHARE_WARN:
+            print(
+                f"WARNING: {api} is {share:.1%} of kept cases (> {SHARE_WARN:.0%})",
+                file=sys.stderr,
+            )
+    print(f"kept total {total}")
     return 0
 
 
@@ -250,6 +297,10 @@ def _build_parser() -> argparse.ArgumentParser:
     m = sub.add_parser("mine", help="mine draft cases from public spec history")
     m.add_argument("--api", help="only this source (e.g. github)")
     common(m)
+    sl = sub.add_parser("select", help="cap drafted cases per api; move the rest to cases/pool/")
+    sl.add_argument("--repair-per-api", type=int, default=30)
+    sl.add_argument("--refuse-per-api", type=int, default=6)
+    common(sl)
     r = sub.add_parser("review", help="render or apply REVIEW.md")
     r.add_argument("action", choices=["render", "apply"])
     common(r, review=True)
@@ -268,7 +319,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    handler = {"mine": _cmd_mine, "review": _cmd_review, "run": _cmd_run, "report": _cmd_report}
+    handler = {
+        "mine": _cmd_mine,
+        "select": _cmd_select,
+        "review": _cmd_review,
+        "run": _cmd_run,
+        "report": _cmd_report,
+    }
     return handler[args.cmd](args)
 
 

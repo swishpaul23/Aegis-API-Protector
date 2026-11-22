@@ -91,6 +91,7 @@ From the repo root, with the dev dependencies installed:
 
 ```
 python -m evals.real_api mine [--api github]          # network; writes cases/, never overwrites
+python -m evals.real_api select                       # cap drafted cases per api (30 repair, 6 refuse)
 python -m evals.real_api review render                # then edit REVIEW.md by hand
 python -m evals.real_api review apply
 python -m evals.real_api run --split dev --mode rules # iterate on bugs here (own run dir)
@@ -99,6 +100,18 @@ python -m evals.real_api run                          # headline: test split, bo
 python -m evals.real_api run --rerun                  # only if you must; recorded in meta
 python -m evals.real_api report [RUN_DIR]            # re-render one run (default: latest)
 ```
+
+`select [--cases DIR] [--repair-per-api 30] [--refuse-per-api 6]` keeps review effort and the
+per-API mix bounded. It looks only at `drafted` cases in the top level of the cases dir, groups
+them by `api`, orders each api's cases by `sha256(case.id)` (hex), keeps the first N with
+`expected="repair"` and the first M with `expected="refuse"`, and moves every other drafted case
+to `<cases>/pool/` under the same filename. It is deterministic and outcome-blind: it reads only
+case files (never run results), so the selection cannot be influenced by how Aegis scores, and a
+second run moves nothing. Confirmed cases are never moved or counted against the quota. The pool
+is kept, not deleted, so anyone can see what was left out; `load_cases` reads only the top-level
+dir, so pooled cases are excluded from `review render` and from runs. It prints kept repair, kept
+refuse and pooled per api, each api's share of the kept total, and warns (exit code unchanged)
+if one api exceeds 40%.
 
 `mine` skips sources with no version pairs configured and skips any case id that already has
 a file, so confirmed labels survive re-mining. `run` fails with exit code 2 before doing any
