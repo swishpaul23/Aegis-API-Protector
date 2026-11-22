@@ -66,6 +66,21 @@ detect → diff → rule matcher → (agent, only for what's left) → validate 
    every one is at or above `auto_apply_threshold` (default `0.9`; `1.0` means a human
    approves every agent fix). Everything else waits in `aegis review`.
 
+
+## Results on real API changes
+
+Tested on 49 real breaking changes mined from the public OpenAPI history of Stripe, GitHub,
+Twilio and Box (frozen test set, run once, Aegis 0.1.2, Claude Haiku):
+
+| | Rules only | Rules + agent |
+|---|---|---|
+| Fixable changes repaired (19) | 4 (21%) | **14 (74%)** |
+| Deleted fields correctly refused (30) | 30 (100%) | **30 (100%)** |
+| Wrong fixes auto-applied (49) | 0 | **0** |
+| Sent to human review instead | 15 | 5 |
+| LLM cost | none | $0.02 |
+
+
 ## Self-healing pipeline
 
 `Pipeline` wraps fetch, heal and load, and holds back records you can't load safely yet:

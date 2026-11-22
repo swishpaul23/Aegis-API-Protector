@@ -1,0 +1,203 @@
+{
+  "meta": {
+    "aegis_version": "0.1.2",
+    "model": "claude-haiku-5-5",
+    "date": "2026-11-22",
+    "split": "dev",
+    "prior_test_runs": 0,
+    "created_at": "2026-11-22T07:11:20+00:00",
+    "run": "2026-11-22-dev-1",
+    "modes_run": "rules"
+  },
+  "split": "dev",
+  "mode": "rules",
+  "rows": [
+    {
+      "id": "box-IntegrationMapping--Base-8d599d35",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "github-actions-billing-usage-7710a4f6",
+      "outcome": "safe_deferral",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "github-organization-secret-scanning-alert-4e1838b1",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "github-organization-secret-scanning-alert-4fc9328a",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "github-organization-secret-scanning-alert-676a7958",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "github-organization-secret-scanning-alert-6898c369",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "github-organization-secret-scanning-alert-9b300f44",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "github-organization-secret-scanning-alert-fe2da873",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "github-rate-limit-overview-ce4e6170",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "stripe-error-6c2a9eaa",
+      "outcome": "repaired",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "stripe-issuing.authorization-142d1744",
+      "outcome": "safe_deferral",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "drafted",
+      "error": null
+    },
+    {
+      "id": "stripe-issuing.card-ddc42da3",
+      "outcome": "safe_deferral",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "stripe-issuing_transaction_fuel_data-1fc52bcb",
+      "outcome": "safe_deferral",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "stripe-source-2ea4e811",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "stripe-source_transaction-355e051e",
+      "outcome": "correct_refusal",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "stripe-source_transaction_gbp_credit_transfer_data-095a9213",
+      "outcome": "safe_deferral",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    },
+    {
+      "id": "stripe-subscription_schedule-5619fb80",
+      "outcome": "repaired",
+      "usage": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "label_status": "confirmed",
+      "error": null
+    }
+  ]
+}
