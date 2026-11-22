@@ -1,10 +1,10 @@
 {
   "ambiguous": true,
   "api": "stripe",
-  "expected": "repair",
+  "expected": "refuse",
   "id": "stripe-account-c1dff326",
-  "kind": "move",
-  "label_status": "drafted",
+  "kind": "unmappable",
+  "label_status": "confirmed",
   "maps": [],
   "new_fields": {
     "application_icon": "string",

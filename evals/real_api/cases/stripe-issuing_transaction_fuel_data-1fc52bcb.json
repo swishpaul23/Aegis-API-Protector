@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "stripe-issuing_transaction_fuel_data-1fc52bcb",
   "kind": "rename",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",

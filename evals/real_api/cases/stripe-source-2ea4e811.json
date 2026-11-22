@@ -4,7 +4,7 @@
   "expected": "refuse",
   "id": "stripe-source-2ea4e811",
   "kind": "unmappable",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [],
   "new_fields": {
     "ach_credit_transfer.account_number": "string",

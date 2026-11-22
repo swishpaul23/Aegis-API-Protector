@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "twilio-events.v1.schema-3192c225",
   "kind": "rename",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",

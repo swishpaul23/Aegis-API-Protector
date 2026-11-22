@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "twilio-iam.v1.CreateAccountRequest-aa0c08d8",
   "kind": "rename",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",

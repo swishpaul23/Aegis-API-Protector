@@ -1,0 +1,40 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-issuing.card-05df2045",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "brand": "string",
+    "cancellation_reason": "string",
+    "created": "integer",
+    "currency": "string",
+    "exp_month": "integer",
+    "exp_year": "integer",
+    "id": "string",
+    "last4": "string",
+    "livemode": "boolean",
+    "spending_controls.spending_limits_currency": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "brand": "string",
+    "created": "integer",
+    "currency": "string",
+    "exp_month": "integer",
+    "exp_year": "integer",
+    "id": "string",
+    "last4": "string",
+    "livemode": "boolean",
+    "name": "string"
+  },
+  "source": {
+    "new_ref": "34ddc7feabef",
+    "old_ref": "a63555d40ae5",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "issuing.card",
+    "spec_path": "openapi/spec3.json"
+  }
+}

@@ -4,8 +4,19 @@
   "expected": "repair",
   "id": "stripe-issuing.authorization-725cdfdd",
   "kind": "rename",
-  "label_status": "drafted",
-  "maps": [],
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "merchant_currency",
+      "target": "authorized_currency"
+    },
+    {
+      "convert": "none",
+      "source": "currency",
+      "target": "held_currency"
+    }
+  ],
   "new_fields": {
     "amount": "integer",
     "approved": "boolean",

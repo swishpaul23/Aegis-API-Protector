@@ -4,7 +4,7 @@
   "expected": "refuse",
   "id": "stripe-source_transaction-3ec3fcb3",
   "kind": "unmappable",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [],
   "new_fields": {
     "ach_credit_transfer.customer_data": "string",

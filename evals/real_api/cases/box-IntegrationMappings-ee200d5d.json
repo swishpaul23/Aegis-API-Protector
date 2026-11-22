@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "box-IntegrationMappings-ee200d5d",
   "kind": "retype",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "int_str",

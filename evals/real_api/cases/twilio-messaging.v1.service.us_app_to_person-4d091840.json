@@ -1,11 +1,17 @@
 {
   "ambiguous": false,
   "api": "twilio",
-  "expected": "refuse",
+  "expected": "repair",
   "id": "twilio-messaging.v1.service.us_app_to_person-4d091840",
-  "kind": "unmappable",
-  "label_status": "drafted",
-  "maps": [],
+  "kind": "rename",
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "campaign_status",
+      "target": "status"
+    }
+  ],
   "new_fields": {
     "account_sid": "string",
     "brand_registration_sid": "string",

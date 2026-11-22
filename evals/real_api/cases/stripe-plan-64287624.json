@@ -1,17 +1,11 @@
 {
   "ambiguous": false,
   "api": "stripe",
-  "expected": "repair",
+  "expected": "refuse",
   "id": "stripe-plan-64287624",
-  "kind": "rename",
-  "label_status": "drafted",
-  "maps": [
-    {
-      "convert": "none",
-      "source": "nickname",
-      "target": "name"
-    }
-  ],
+  "kind": "unmappable",
+  "label_status": "confirmed",
+  "maps": [],
   "new_fields": {
     "amount": "integer",
     "created": "integer",

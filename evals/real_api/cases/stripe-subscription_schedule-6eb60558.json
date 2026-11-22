@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "stripe-subscription_schedule-6eb60558",
   "kind": "rename",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",

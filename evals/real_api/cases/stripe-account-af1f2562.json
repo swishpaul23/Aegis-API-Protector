@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "stripe-account-af1f2562",
   "kind": "move",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",

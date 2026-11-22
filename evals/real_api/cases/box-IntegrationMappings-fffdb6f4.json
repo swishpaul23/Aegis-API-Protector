@@ -4,7 +4,7 @@
   "expected": "refuse",
   "id": "box-IntegrationMappings-fffdb6f4",
   "kind": "unmappable",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [],
   "new_fields": {
     "limit": "integer"

@@ -1,0 +1,42 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-full-repository-944dbba9",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "allow_merge_commit": "boolean",
+    "allow_rebase_merge": "boolean",
+    "allow_squash_merge": "boolean",
+    "anonymous_access_enabled": "boolean",
+    "archive_url": "string",
+    "archived": "boolean",
+    "assignees_url": "string",
+    "blobs_url": "string",
+    "code_of_conduct.html_url": "string",
+    "code_of_conduct.key": "string",
+    "code_of_conduct.name": "string",
+    "code_of_conduct.url": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "allow_merge_commit": "boolean",
+    "allow_rebase_merge": "boolean",
+    "allow_squash_merge": "boolean",
+    "anonymous_access_enabled": "boolean",
+    "archive_url": "string",
+    "archived": "boolean",
+    "assignees_url": "string",
+    "blobs_url": "string",
+    "source.template_repository.template_repository": "string"
+  },
+  "source": {
+    "new_ref": "5a5a1deffbc6",
+    "old_ref": "00a39efd0467",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "full-repository",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

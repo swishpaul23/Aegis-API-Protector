@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "stripe-error-ab24fb61",
   "kind": "move",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",

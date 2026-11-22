@@ -1,17 +1,11 @@
 {
   "ambiguous": false,
   "api": "stripe",
-  "expected": "repair",
+  "expected": "refuse",
   "id": "stripe-terminal_configuration_configuration_resource_tipping-dd5d3895",
-  "kind": "move",
-  "label_status": "drafted",
-  "maps": [
-    {
-      "convert": "none",
-      "source": "gip.smart_tip_threshold",
-      "target": "bgn.smart_tip_threshold"
-    }
-  ],
+  "kind": "unmappable",
+  "label_status": "confirmed",
+  "maps": [],
   "new_fields": {
     "aed.smart_tip_threshold": "integer",
     "aud.smart_tip_threshold": "integer",

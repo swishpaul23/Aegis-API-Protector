@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "stripe-issuing.card-ddc42da3",
   "kind": "move",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",
@@ -15,15 +15,6 @@
   "new_fields": {
     "brand": "string",
     "cancellation_reason": "string",
-    "cardholder.created": "integer",
-    "cardholder.email": "string",
-    "cardholder.id": "string",
-    "cardholder.livemode": "boolean",
-    "cardholder.name": "string",
-    "cardholder.object": "string",
-    "cardholder.phone_number": "string",
-    "cardholder.status": "string",
-    "cardholder.type": "string",
     "created": "integer",
     "currency": "string",
     "exp_month": "integer",

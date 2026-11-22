@@ -4,7 +4,7 @@
   "expected": "refuse",
   "id": "github-webhook-discussion-unanswered-bbabc834",
   "kind": "unmappable",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [],
   "new_fields": {
     "action": "string",

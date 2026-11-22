@@ -1,10 +1,10 @@
 {
   "ambiguous": true,
   "api": "stripe",
-  "expected": "repair",
+  "expected": "refuse",
   "id": "stripe-source_transaction-355e051e",
-  "kind": "move",
-  "label_status": "drafted",
+  "kind": "unmappable",
+  "label_status": "confirmed",
   "maps": [],
   "new_fields": {
     "ach_credit_transfer.customer_data": "string",

@@ -1,17 +1,11 @@
 {
   "ambiguous": false,
   "api": "github",
-  "expected": "repair",
+  "expected": "refuse",
   "id": "github-rate-limit-overview-47665090",
-  "kind": "move",
-  "label_status": "drafted",
-  "maps": [
-    {
-      "convert": "none",
-      "source": "resources.copilot_usage_records.limit",
-      "target": "resources.code_scanning_upload.limit"
-    }
-  ],
+  "kind": "unmappable",
+  "label_status": "confirmed",
+  "maps": [],
   "new_fields": {
     "rate.limit": "integer",
     "rate.remaining": "integer",

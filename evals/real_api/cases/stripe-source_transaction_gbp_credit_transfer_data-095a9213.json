@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "stripe-source_transaction_gbp_credit_transfer_data-095a9213",
   "kind": "rename",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",

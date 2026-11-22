@@ -4,7 +4,7 @@
   "expected": "refuse",
   "id": "stripe-account_settings-6d1e7a5b",
   "kind": "unmappable",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [],
   "new_fields": {
     "bacs_debit_payments.display_name": "string",

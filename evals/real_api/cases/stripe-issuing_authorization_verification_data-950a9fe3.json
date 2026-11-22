@@ -4,7 +4,7 @@
   "expected": "repair",
   "id": "stripe-issuing_authorization_verification_data-950a9fe3",
   "kind": "rename",
-  "label_status": "drafted",
+  "label_status": "confirmed",
   "maps": [
     {
       "convert": "none",
