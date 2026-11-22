@@ -11,7 +11,13 @@ from aegis_healer import HealResult
 from evals.real_api.cases import Case
 
 Outcome = Literal[
-    "repaired", "wrong_applied", "correct_refusal", "safe_deferral", "crashed", "not_breaking"
+    "repaired",
+    "wrong_applied",
+    "correct_refusal",
+    "safe_deferral",
+    "crashed",
+    "agent_error",
+    "not_breaking",
 ]
 
 OUTCOMES: tuple[Outcome, ...] = (
@@ -20,6 +26,7 @@ OUTCOMES: tuple[Outcome, ...] = (
     "correct_refusal",
     "safe_deferral",
     "crashed",
+    "agent_error",  # agent called but never answered (outage/bad key); in N, as a failure
     "not_breaking",
 )
 # Outcomes that are not part of the denominator N: the change did not break the model.

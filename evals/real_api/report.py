@@ -18,7 +18,7 @@ HONESTY_NOTE = (
 __all__ = ["HONESTY_NOTE", "Row", "write_report"]
 
 # Outcomes listed case by case (with the recorded reason) under each split.
-LISTED: tuple[str, ...] = ("wrong_applied", "crashed")
+LISTED: tuple[str, ...] = ("wrong_applied", "crashed", "agent_error")
 
 
 def _is_headline(case: Case) -> bool:
@@ -101,7 +101,11 @@ def _compare_table(title: str, rules: dict, agent: dict) -> list[str]:
     return lines
 
 
-_TITLES = {"wrong_applied": "Wrongly applied", "crashed": "Crashed"}
+_TITLES = {
+    "wrong_applied": "Wrongly applied",
+    "crashed": "Crashed",
+    "agent_error": "Agent errors (called, no tokens returned)",
+}
 
 
 def _listed(rules: dict, agent: dict, prefix: str) -> list[str]:

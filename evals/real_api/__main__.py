@@ -12,14 +12,14 @@ from pathlib import Path
 
 import aegis_healer
 from aegis_healer.agent import Usage
-from aegis_healer.agent.graph import DEFAULT_MODEL
+from evals.real_api import runner
 from evals.real_api.cases import Case, load_cases, save_case, split_of
 from evals.real_api.miner.candidates import mine
 from evals.real_api.miner.sources import SOURCES
 from evals.real_api.miner.specs import clone_repo
 from evals.real_api.report import Row, write_report
 from evals.real_api.review import apply_review, render_review
-from evals.real_api.runner import run_all
+from evals.real_api.runner import AgentOutage, run_all
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_CASES = HERE / "cases"
@@ -31,7 +31,7 @@ MODES = ("rules", "agent")
 def _meta() -> dict:
     return {
         "aegis_version": aegis_healer.__version__,
-        "model": os.environ.get("AEGIS_MODEL") or DEFAULT_MODEL,
+        "model": runner.agent_model(),
         "date": datetime.date.today().isoformat(),
     }
 
@@ -135,6 +135,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if not cases:
         print(f"error: no cases in the {args.split} split ({args.cases})", file=sys.stderr)
         return 1
+    if "agent" in modes:
+        try:  # before any run dir exists: a bad key or outage must not cost a test run
+            runner.preflight_agent()
+        except RuntimeError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
     out = Path(args.out)
     meta = _meta()
     meta["split"] = args.split
@@ -145,7 +151,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     rows: dict[str, list[Row]] = {"rules": [], "agent": []}
     with tempfile.TemporaryDirectory() as tmp:
         for mode in modes:
-            rows[mode] = run_all(cases, mode, Path(tmp) / mode)
+            try:
+                rows[mode] = run_all(cases, mode, Path(tmp) / mode)
+            except (AgentOutage, RuntimeError) as e:
+                print(
+                    f"error: {mode} pass {e}; no {mode} rows written, no report. "
+                    f"{run_dir} still counts as a run.",
+                    file=sys.stderr,
+                )
+                return 2
             _dump_rows(rows[mode], run_dir / f"raw-{mode}.json", meta, mode)
     _, md = write_report(rows["rules"], rows["agent"], run_dir, meta)
     print(f"{len(cases)} {args.split} cases; report: {md}")

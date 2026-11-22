@@ -135,3 +135,17 @@ def test_crashed_cases_listed_with_reason(tmp_path):
     assert data["rules"]["crashed_ids"] == [t1]
     assert data["rules"]["dev_crashed_ids"] == [d1]
     assert data["rules"]["errors"] == {t1: "ValueError: boom", d1: "KeyError: x"}
+
+
+def test_agent_error_counts_in_n_and_is_listed(tmp_path):
+    t1, t2 = _ids("test", 2)
+    agent = [
+        (_case(t1), "repaired", U, None),
+        (_case(t2), "agent_error", Usage(calls=3), "AuthenticationError: 401"),
+    ]
+    jp, mp = write_report([], agent, tmp_path, META)
+    data = json.loads(jp.read_text())
+    assert data["agent"]["headline"]["n"] == 2
+    assert data["agent"]["headline"]["repair_rate"] == 0.5
+    assert data["agent"]["agent_error_ids"] == [t2]
+    assert f"{t2} (AuthenticationError: 401)" in mp.read_text()

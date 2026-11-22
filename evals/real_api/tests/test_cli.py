@@ -3,9 +3,16 @@ import json
 import pytest
 
 from evals.real_api import __main__ as cli
+from evals.real_api import runner
 from evals.real_api.cases import load_cases, save_case, split_of
 from evals.real_api.miner.sources import Source
 from evals.real_api.tests.seed_cases import SEEDS
+
+
+@pytest.fixture(autouse=True)
+def _no_live_preflight(monkeypatch):
+    """CLI tests never reach the network; tests that care override this."""
+    monkeypatch.setattr(runner, "preflight_agent", lambda: None)
 
 
 def _seed_dir(tmp_path):
@@ -211,3 +218,40 @@ def test_zero_case_run_exits_1_and_creates_nothing(tmp_path, capsys):
 def test_no_args_is_usage_error():
     with pytest.raises(SystemExit):
         cli.main([])
+
+
+def test_run_preflight_failure_exits_2_before_creating_anything(tmp_path, monkeypatch, capsys):
+    cases = _split_seed_dir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "bad")
+
+    def boom():
+        raise RuntimeError("agent preflight failed (m): AuthenticationError: 401")
+
+    called = []
+    monkeypatch.setattr(runner, "preflight_agent", boom)
+    monkeypatch.setattr(cli, "run_all", lambda *a, **k: called.append(1) or [])
+    out = tmp_path / "out"
+    assert _run(cases, out, "dev", mode="both") == 2
+    assert called == [] and not out.exists()
+    err = capsys.readouterr().err
+    assert "preflight" in err and "Traceback" not in err
+
+
+def test_run_agent_outage_exits_2_and_writes_no_agent_rows(tmp_path, monkeypatch, capsys):
+    cases = _split_seed_dir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    real = cli.run_all
+
+    def fake(cs, mode, tmp_root):
+        if mode == "agent":
+            raise runner.AgentOutage("aborted: 4 cases ended in agent_error")
+        return real(cs, mode, tmp_root)
+
+    monkeypatch.setattr(cli, "run_all", fake)
+    out = tmp_path / "out"
+    assert _run(cases, out, "dev", mode="both") == 2
+    (run_dir,) = list(out.iterdir())
+    assert (run_dir / "raw-rules.json").exists()
+    assert not (run_dir / "raw-agent.json").exists()
+    assert not list(run_dir.glob("*.md"))
+    assert "agent_error" in capsys.readouterr().err

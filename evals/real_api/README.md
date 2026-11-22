@@ -21,6 +21,7 @@ Each case is scored into one outcome:
 | correct_refusal | Expected a refusal; nothing was applied. |
 | safe_deferral | Expected a repair but nothing was applied (left pending/failed for a human). Not an error. |
 | crashed | An exception while building the case or healing. Counted as a failure and listed with its reason; one bad case never aborts the run. |
+| agent_error | Agent mode only: the agent was called but no tokens came back (API outage, bad key, rate limit), and nothing was applied. Not Aegis's decision, so it is never scored as a deferral or refusal; it **counts in N as a failure** and is listed. More than 3 in one run aborts the agent pass. |
 | not_breaking | Expected a repair, but Healer returned `ok` (no drift detected) with the expected values: the change did not break the model, so Aegis did nothing. **Excluded from N** and reported separately in every table. `ok` with wrong values, or `ok` on a refuse case, is wrong_applied. |
 
 Headline = repaired / N, where N = confirmed test cases whose outcome is not not_breaking,
@@ -91,7 +92,11 @@ python -m evals.real_api report [RUN_DIR]            # re-render one run (defaul
 
 `mine` skips sources with no version pairs configured and skips any case id that already has
 a file, so confirmed labels survive re-mining. `run` fails with exit code 2 before doing any
-work if agent mode is requested without `ANTHROPIC_API_KEY`. Running the rules mode needs no
+work if agent mode is requested without `ANTHROPIC_API_KEY`, or if the live preflight (one
+tiny call to the eval's model, `AEGIS_MODEL` or the default) fails; no run directory is
+created then. If more than 3 cases end in agent_error, the agent pass aborts with exit code 2:
+no agent rows and no report are written (rules rows already written stay, and the directory
+still counts as a run). Running the rules mode needs no
 network and no key. `AEGIS_MODEL` overrides the agent model.
 
 Options: `--cases DIR` and `--out DIR` override the cases and results directories.
