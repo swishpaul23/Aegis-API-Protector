@@ -76,13 +76,35 @@ def _cmd_review(args: argparse.Namespace) -> int:
     return 1 if (res["errors"] or res["malformed"] or res["missing"]) else 0
 
 
+def _now() -> str:
+    return datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+
+
 def _new_run_dir(out: Path, date: str, split: str) -> Path:
+    out.mkdir(parents=True, exist_ok=True)
     n = 1
-    while (out / f"{date}-{split}-{n}").exists():
-        n += 1
-    run_dir = out / f"{date}-{split}-{n}"
-    run_dir.mkdir(parents=True)
-    return run_dir
+    while True:
+        run_dir = out / f"{date}-{split}-{n}"
+        try:
+            run_dir.mkdir(exist_ok=False)
+        except FileExistsError:
+            n += 1
+            continue
+        return run_dir
+
+
+def _run_key(run_dir: Path) -> tuple[str, int]:
+    """Sort key: newest created_at from the run's raw files, then run number."""
+    stamps = []
+    for mode in MODES:
+        raw = run_dir / f"raw-{mode}.json"
+        if raw.exists():
+            try:
+                stamps.append(json.loads(raw.read_text(encoding="utf-8"))["meta"]["created_at"])
+            except (ValueError, KeyError):
+                pass
+    tail = run_dir.name.rsplit("-", 1)[-1]
+    return (max(stamps, default=""), int(tail) if tail.isdigit() else 0)
 
 
 def _dump_rows(rows: list[Row], path: Path, meta: dict, mode: str) -> None:
@@ -110,6 +132,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     out = Path(args.out)
     meta = _meta()
     meta["split"] = args.split
+    meta["created_at"] = _now()
     run_dir = _new_run_dir(out, meta["date"], args.split)
     meta["run"] = run_dir.name
     meta["modes_run"] = ", ".join(modes)
@@ -146,11 +169,15 @@ def _cmd_report(args: argparse.Namespace) -> int:
     if args.run_dir:
         run_dir = Path(args.run_dir)
     else:
-        runs = sorted(p for p in out.glob("*-*-*") if p.is_dir()) if out.is_dir() else []
+        runs = [
+            p
+            for p in out.glob("*-*-*")
+            if (p / "raw-rules.json").exists() or (p / "raw-agent.json").exists()
+        ]
         if not runs:
             print(f"error: no run directories in {out}", file=sys.stderr)
             return 2
-        run_dir = runs[-1]
+        run_dir = max(runs, key=_run_key)
     by_id = {c.id: c for c in load_cases(Path(args.cases))}
     rows: dict[str, list[Row]] = {m: [] for m in MODES}
     meta: dict | None = None

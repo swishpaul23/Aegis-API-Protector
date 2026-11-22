@@ -167,6 +167,38 @@ def test_report_defaults_to_latest_run_and_warns_on_label_change(tmp_path, capsy
     assert f"warning: {c.id}" in capsys.readouterr().err
 
 
+def _tick_clock(monkeypatch):
+    ticks = iter(range(10_000))
+
+    def now():
+        n = next(ticks)
+        return f"2026-01-01T{n // 3600:02d}:{n // 60 % 60:02d}:{n % 60:02d}+00:00"
+
+    monkeypatch.setattr(cli, "_now", now)
+
+
+def test_default_report_picks_most_recent_run_not_name_order(tmp_path, monkeypatch, capsys):
+    cases = _split_seed_dir(tmp_path)
+    out = tmp_path / "out"
+    _tick_clock(monkeypatch)
+    for split in ("dev", "test", "dev"):
+        _run(cases, out, split)
+    capsys.readouterr()
+    assert cli.main(["report", "--cases", str(cases), "--out", str(out)]) == 0
+    assert "-dev-2" in capsys.readouterr().out
+
+
+def test_default_report_picks_run_11_over_run_2(tmp_path, monkeypatch, capsys):
+    cases = _split_seed_dir(tmp_path)
+    out = tmp_path / "out"
+    _tick_clock(monkeypatch)
+    for _ in range(11):
+        _run(cases, out, "dev")
+    capsys.readouterr()
+    assert cli.main(["report", "--cases", str(cases), "--out", str(out)]) == 0
+    assert "-dev-11" in capsys.readouterr().out
+
+
 def test_zero_case_run_exits_1_and_creates_nothing(tmp_path, capsys):
     out = tmp_path / "out"
     empty = tmp_path / "empty"
