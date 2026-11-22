@@ -58,11 +58,21 @@ def _pct(x: float) -> str:
 
 
 def _rate(count: int, n: int) -> str:
-    return f"{_pct(count / n if n else 0.0)} ({count}/{n})"
+    if not n:
+        return f"n/a ({count}/0)"  # never print 0.0% for an empty denominator
+    return f"{_pct(count / n)} ({count}/{n})"
+
+
+NOT_RUN = "not run"
+
+
+def _cell(block: dict, count: int, n: int) -> str:
+    return _rate(count, n) if block["ran"] else NOT_RUN
 
 
 def _breakdown(title: str, key: str, rules: dict, agent: dict) -> list[str]:
-    names = sorted(set(rules[key]) | set(agent[key]))
+    rb, ab = rules["headline"], agent["headline"]
+    names = sorted(set(rb[key]) | set(ab[key]))
     lines = [
         f"### {title}",
         "",
@@ -72,33 +82,48 @@ def _breakdown(title: str, key: str, rules: dict, agent: dict) -> list[str]:
     ]
     empty = {"n": 0, "counts": {o: 0 for o in OUTCOMES}}
     for name in names:
-        r, a = rules[key].get(name, empty), agent[key].get(name, empty)
+        r, a = rb[key].get(name, empty), ab[key].get(name, empty)
         n = max(r["n"], a["n"])
         lines.append(
-            f"| {name} | {n} | {_rate(r['counts']['repaired'], r['n'])} "
-            f"| {_rate(a['counts']['repaired'], a['n'])} "
-            f"| {_rate(r['counts']['wrong_applied'], r['n'])} "
-            f"| {_rate(a['counts']['wrong_applied'], a['n'])} "
+            f"| {name} | {n} | {_cell(rules, r['counts']['repaired'], r['n'])} "
+            f"| {_cell(agent, a['counts']['repaired'], a['n'])} "
+            f"| {_cell(rules, r['counts']['wrong_applied'], r['n'])} "
+            f"| {_cell(agent, a['counts']['wrong_applied'], a['n'])} "
             f"| {max(r['counts']['not_breaking'], a['counts']['not_breaking'])} |"
         )
     lines.append("")
     return lines
 
 
-def _compare_table(title: str, rules: dict, agent: dict) -> list[str]:
+def _compare_table(title: str, rules: dict, agent: dict, part: str) -> list[str]:
     lines = [f"### {title}", "", "| Outcome | Rules only | Rules + agent |", "|---|---|---|"]
+    r, a = rules[part], agent[part]
     for o in OUTCOMES:
         if o in EXCLUDED_FROM_N:
-            lines.append(
-                f"| {o} (excluded from N) | {rules['counts'][o]} | {agent['counts'][o]} |"
-            )
+            rc = r["counts"][o] if rules["ran"] else NOT_RUN
+            ac = a["counts"][o] if agent["ran"] else NOT_RUN
+            lines.append(f"| {o} (excluded from N) | {rc} | {ac} |")
             continue
         lines.append(
-            f"| {o} | {_rate(rules['counts'][o], rules['n'])} "
-            f"| {_rate(agent['counts'][o], agent['n'])} |"
+            f"| {o} | {_cell(rules, r['counts'][o], r['n'])} "
+            f"| {_cell(agent, a['counts'][o], a['n'])} |"
         )
     lines.append("")
     return lines
+
+
+def _headline(label: str, block: dict) -> str:
+    if not block["ran"]:
+        return f"**{label}: {NOT_RUN}.**"
+    h = block["headline"]
+    n, c = h["n"], h["counts"]
+    nb = f"{c['not_breaking']} not breaking (excluded from N)"
+    if n == 0:
+        return f"**{label}: no confirmed breaking test cases (N=0); {nb}.**"
+    return (
+        f"**{label}: repaired {_rate(c['repaired'], n)} of {n} confirmed breaking test cases; "
+        f"wrongly auto-applied {_rate(c['wrong_applied'], n)}; {nb}.**"
+    )
 
 
 _TITLES = {
@@ -113,6 +138,9 @@ def _listed(rules: dict, agent: dict, prefix: str) -> list[str]:
     for o in LISTED:
         out += [f"### {_TITLES[o]} (case ids)", ""]
         for label, block in (("Rules only", rules), ("Agent", agent)):
+            if not block["ran"]:
+                out.append(f"- {label}: {NOT_RUN}")
+                continue
             ids = block.get(f"{prefix}{o}_ids", [])
             errs = block.get("errors", {})
             shown = [f"{i} ({errs[i]})" if i in errs else i for i in ids]
@@ -121,22 +149,22 @@ def _listed(rules: dict, agent: dict, prefix: str) -> list[str]:
     return out
 
 
+def _modes_ran(meta: dict, rules_rows: list[Row], agent_rows: list[Row]) -> dict[str, bool]:
+    """Which modes ran: from meta["modes_run"] when present, else from which have rows."""
+    if "modes_run" in meta:
+        listed = {m.strip() for m in str(meta["modes_run"]).split(",")}
+        return {"rules": "rules" in listed, "agent": "agent" in listed}
+    return {"rules": bool(rules_rows), "agent": bool(agent_rows)}
+
+
 _EXTRA_META = ("split", "run", "modes_run", "prior_test_runs")
 
 
 def _render(data: dict[str, Any]) -> str:
     meta, rules, agent = data["meta"], data["rules"], data["agent"]
-    rh, ah = rules["headline"], agent["headline"]
-    n = ah["n"]
-    if n == 0 and rh["n"] == 0:
-        headline = "No confirmed test cases yet: no headline number."
-    else:
-        headline = (
-            f"Headline: rules+agent repaired {_rate(ah['counts']['repaired'], ah['n'])} of "
-            f"{ah['n']} confirmed test cases (rules only: "
-            f"{_rate(rh['counts']['repaired'], rh['n'])}); wrongly auto-applied "
-            f"{_rate(ah['counts']['wrong_applied'], ah['n'])}."
-        )
+    heads = [_headline("Rules only", rules), _headline("Rules + agent", agent)]
+    if not any(b["ran"] and b["headline"]["n"] for b in (rules, agent)):
+        heads.insert(0, "No confirmed test cases yet: no headline number.")
     out = [
         "# Aegis real-API eval",
         "",
@@ -145,21 +173,23 @@ def _render(data: dict[str, Any]) -> str:
         f"- Date: {meta['date']}",
         *[f"- {k.replace('_', ' ').capitalize()}: {meta[k]}" for k in _EXTRA_META if k in meta],
         "",
-        f"**{headline}**",
-        "",
+        *[x for h in heads for x in (h, "")],
         f"_{HONESTY_NOTE}_",
         "",
         "## Confirmed test split",
         "",
     ]
-    out += _compare_table("Rules only vs rules + agent", rh, ah)
-    out += _breakdown("Per API", "by_api", rh, ah)
-    out += _breakdown("Per kind", "by_kind", rh, ah)
+    out += _compare_table("Rules only vs rules + agent", rules, agent, "headline")
+    out += _breakdown("Per API", "by_api", rules, agent)
+    out += _breakdown("Per kind", "by_kind", rules, agent)
     out += _listed(rules, agent, "")
     out += ["## Dev split and unconfirmed cases (not headline)", ""]
-    out += _compare_table("Dev / drafted", rules["dev"], agent["dev"])
+    out += _compare_table("Dev / drafted", rules, agent, "dev")
     out += _listed(rules, agent, "dev_")
     out += ["## Usage (agent run)", ""]
+    if not agent["ran"]:
+        out += [f"Agent {NOT_RUN}.", ""]
+        return "\n".join(out)
     for label, u in (
         ("Headline rows only (confirmed test split)", agent["headline_usage"]),
         ("All cases incl. dev/unconfirmed", agent["usage"]),
@@ -190,6 +220,8 @@ def write_report(
         "rules": _mode_block(rules_rows),
         "agent": _mode_block(agent_rows),
     }
+    for mode, ran in _modes_ran(meta, rules_rows, agent_rows).items():
+        data[mode]["ran"] = ran
     date = meta["date"]
     jp, mp = out_dir / f"{date}.json", out_dir / f"{date}.md"
     jp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")

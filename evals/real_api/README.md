@@ -25,8 +25,12 @@ Each case is scored into one outcome:
 | not_breaking | Expected a repair, but Healer returned `ok` (no drift detected) with the expected values: the change did not break the model, so Aegis did nothing. **Excluded from N** and reported separately in every table. `ok` with wrong values, or `ok` on a refuse case, is wrong_applied. |
 
 Headline = repaired / N, where N = confirmed test cases whose outcome is not not_breaking,
-reported beside the wrongly-applied count and rate. Rules-only and
-rules+agent are reported side by side so the agent's lift is visible.
+reported beside the wrongly-applied count and rate. The report prints one headline line per
+mode, e.g. `Rules only: repaired 50.0% (1/2) of 2 confirmed breaking test cases; wrongly
+auto-applied 0.0% (0/2); 1 not breaking (excluded from N).` A mode that was not run prints
+`not run` in its headline line and every table cell, never `0.0% (0/0)`; an empty
+denominator prints `n/a`. Rules-only and rules+agent sit side by side so the agent's lift is
+visible.
 
 ## Cases and payloads
 
@@ -113,7 +117,8 @@ coexist). It holds `raw-<mode>.json` (meta, split, mode, and per-case outcome, u
 label_status) plus the report `<date>.md` / `<date>.json` (N, per-API and per-kind breakdown,
 tokens, cost, Aegis version, model, date, split, run). `report [RUN_DIR]` re-renders from that
 run's own raw files and stored meta only; it warns if a case's label_status changed since the
-run and uses the stored one. A mode with no raw file in the run shows as not run. A run with
+run and uses the stored one. A mode with no raw file in the run shows as not run (`report` derives the modes from the raw
+files present, so an aborted agent pass re-renders as rules only). A run with
 zero cases to run (for test: zero confirmed test cases) exits 1 and creates nothing.
 
 **Numbers in the resume or README come from `results/*.md` only.**

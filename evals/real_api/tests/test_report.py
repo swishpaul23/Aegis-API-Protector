@@ -149,3 +149,39 @@ def test_agent_error_counts_in_n_and_is_listed(tmp_path):
     assert data["agent"]["headline"]["repair_rate"] == 0.5
     assert data["agent"]["agent_error_ids"] == [t2]
     assert f"{t2} (AuthenticationError: 401)" in mp.read_text()
+
+
+def _headline_lines(md: str) -> list[str]:
+    return [ln for ln in md.splitlines() if ln.startswith(("**Rules only", "**Rules + agent"))]
+
+
+def test_rules_only_run_headline_says_agent_not_run(tmp_path):
+    t1, t2 = _ids("test", 2)
+    rules = [(_case(t1), "repaired", Usage(), None), (_case(t2), "safe_deferral", Usage(), None)]
+    _, mp = write_report(rules, [], tmp_path, {**META, "modes_run": "rules"})
+    md = mp.read_text()
+    lines = _headline_lines(md)
+    assert len(lines) == 2, lines
+    assert "50.0% (1/2)" in lines[0] and "2 confirmed" in lines[0]
+    assert lines[1] == "**Rules + agent: not run.**"
+    assert "0.0% (0/0)" not in md
+    assert "not run" in md.split("### Rules only vs rules + agent")[1].split("###")[0]
+
+
+def test_agent_only_run_headline_says_rules_not_run(tmp_path):
+    (t1,) = _ids("test", 1)
+    agent = [(_case(t1), "repaired", U, None)]
+    _, mp = write_report([], agent, tmp_path, {**META, "modes_run": "agent"})
+    lines = _headline_lines(mp.read_text())
+    assert lines[0] == "**Rules only: not run.**"
+    assert "100.0% (1/1)" in lines[1]
+
+
+def test_headline_lists_not_breaking_separately(tmp_path):
+    t1, t2 = _ids("test", 2)
+    rows = [(_case(t1), "repaired", Usage(), None), (_case(t2), "not_breaking", Usage(), None)]
+    _, mp = write_report(rows, rows, tmp_path, {**META, "modes_run": "rules, agent"})
+    lines = _headline_lines(mp.read_text())
+    assert len(lines) == 2
+    for ln in lines:
+        assert "100.0% (1/1)" in ln and "1 not breaking" in ln

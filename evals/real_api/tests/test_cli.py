@@ -308,3 +308,16 @@ def test_second_test_run_refused_without_rerun(tmp_path, capsys):
     assert second["meta"]["prior_test_runs"] == 1
     md = next(out.glob("*-test-2/*.md")).read_text(encoding="utf-8")
     assert "Prior test runs: 1" in md
+
+
+def test_rules_only_run_report_says_agent_not_run(tmp_path):
+    cases = _split_seed_dir(tmp_path)
+    out = tmp_path / "out"
+    assert _run(cases, out, "test", "rules") == 0
+    (run_dir,) = list(out.iterdir())
+    md = next(run_dir.glob("*.md")).read_text(encoding="utf-8")
+    assert "**Rules + agent: not run.**" in md and "0.0% (0/0)" not in md
+    for p in run_dir.glob("*.md"):
+        p.unlink()
+    assert cli.main(["report", str(run_dir), "--cases", str(cases), "--out", str(out)]) == 0
+    assert "**Rules + agent: not run.**" in next(run_dir.glob("*.md")).read_text(encoding="utf-8")

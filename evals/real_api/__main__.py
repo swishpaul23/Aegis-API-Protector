@@ -228,6 +228,9 @@ def _cmd_report(args: argparse.Namespace) -> int:
     if meta is None:
         print(f"error: no raw-*.json in {run_dir}", file=sys.stderr)
         return 2
+    # what actually completed in this run, not what was requested
+    done = [m for m in MODES if (run_dir / f"raw-{m}.json").exists()]
+    meta = {**meta, "modes_run": ", ".join(done)}
     _, md = write_report(rows["rules"], rows["agent"], run_dir, meta)
     print(f"report: {md}")
     return 0
