@@ -9,18 +9,22 @@ from typing import Any
 
 from evals.real_api.cases import FieldType
 
-MAX_DEPTH = 4  # max nested $ref hops from a root schema
+MAX_DEPTH = 4  # max inline nesting depth (dots in a path)
+MAX_REF_HOPS = 1  # a referenced schema's own $refs are not followed
+MAX_PATHS = 2000  # per-schema budget; expansion stops beyond it
 
 
 def clone_repo(repo_url: str, repo_dir: Path) -> None:
     """Blobless, checkout-less clone; blobs are fetched lazily by `git show`."""
     subprocess.run(
-        ["git", "clone", "--filter=blob:none", "--no-checkout", repo_url, str(repo_dir)],
+        ["git", "clone", "--filter=blob:none", "--no-checkout", "--", repo_url, str(repo_dir)],
         check=True,
     )
 
 
 def fetch_spec(repo_dir: Path, ref: str, spec_path: str) -> dict:
+    if ref.startswith("-"):
+        raise ValueError(f"invalid ref {ref!r}")
     out = subprocess.run(
         ["git", "-C", str(repo_dir), "show", f"{ref}:{spec_path}"],
         check=True,
@@ -48,11 +52,13 @@ def flatten_schemas(spec: dict) -> dict[str, dict[str, FieldType]]:
     def walk(
         node: Any, prefix: str, visiting: frozenset[str], depth: int, out: dict[str, FieldType]
     ) -> None:
-        if not isinstance(node, dict):
+        if not isinstance(node, dict) or len(out) >= MAX_PATHS:
+            return
+        if prefix.count(".") >= MAX_DEPTH:
             return
         if "$ref" in node:
             name = node["$ref"].rsplit("/", 1)[-1]
-            if name in visiting or depth >= MAX_DEPTH or name not in schemas:
+            if name in visiting or depth >= MAX_REF_HOPS or name not in schemas:
                 return
             walk(schemas[name], prefix, visiting | {name}, depth + 1, out)
             return

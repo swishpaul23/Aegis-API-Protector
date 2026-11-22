@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
-from collections import defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -74,24 +75,8 @@ def _components(
     return out
 
 
-def _greedy(rem: list[str], add: list[str], edges: dict[str, dict[str, float]]):
-    pairs = sorted(
-        ((edges[r][a], r, a) for r in rem for a in add if a in edges[r]),
-        key=lambda x: (-x[0], x[1], x[2]),
-    )
-    used_r: set[str] = set()
-    used_a: set[str] = set()
-    chosen = []
-    for _, r, a in pairs:
-        if r not in used_r and a not in used_a:
-            used_r.add(r)
-            used_a.add(a)
-            chosen.append((r, a))
-    return chosen
-
-
 def _plan(old: dict[str, FieldType], new: dict[str, FieldType], d: SchemaDiff) -> list[dict]:
-    """Return case plans: kind, maps, old/new paths involved, ambiguous flag."""
+    """Return case plans: kind, maps, old/new paths involved, ambiguous flag, notes."""
     plans: list[dict] = []
     for path, (ot, nt) in sorted(d.retyped.items()):
         conv = _convert_kind(ot, nt)
@@ -103,6 +88,7 @@ def _plan(old: dict[str, FieldType], new: dict[str, FieldType], d: SchemaDiff) -
                     old=[path],
                     new=[path],
                     ambiguous=False,
+                    notes="",
                 )
             )
     edges: dict[str, dict[str, float]] = {}
@@ -111,24 +97,28 @@ def _plan(old: dict[str, FieldType], new: dict[str, FieldType], d: SchemaDiff) -
         for a, at in d.added.items():
             score = _score(r, a)
             if score is not None and _convert_kind(rt, at):
-                edges[r][a] = score + (0.01 if rt == at else 0.0)
+                edges[r][a] = score
     for rem, add in _components(edges):
-        chosen = _greedy(rem, add, edges)
-        ambiguous = len(rem) > 1 or len(add) > 1 or any(len(edges[r]) > 1 for r in rem)
-        kinds = {_kind(r, a, old[r], new[a]) for r, a in chosen}
+        kinds = {_kind(r, a, old[r], new[a]) for r in rem for a in add if a in edges[r]}
         kind = "retype" if "retype" in kinds else sorted(kinds)[0]
-        plans.append(
-            dict(
-                kind=kind,
-                maps=[(r, a, _convert_kind(old[r], new[a])) for r, a in chosen],
-                old=[r for r, _ in chosen],
-                new=[a for _, a in chosen],
-                ambiguous=ambiguous,
+        if len(rem) == 1 and len(add) == 1:
+            r, a = rem[0], add[0]
+            maps = [(r, a, _convert_kind(old[r], new[a]))]
+            notes = ""
+            ambiguous = False
+        else:  # no guessed key: a human writes the maps
+            maps = []
+            notes = "candidates: " + "; ".join(
+                f"{r}->{{" + ",".join(f"{a}:{edges[r][a]:.2f}" for a in sorted(edges[r])) + "}"
+                for r in rem
             )
-        )
+            ambiguous = True
+        plans.append(dict(kind=kind, maps=maps, old=rem, new=add, ambiguous=ambiguous, notes=notes))
     for r in sorted(d.removed):
         if not edges[r]:
-            plans.append(dict(kind="unmappable", maps=[], old=[r], new=[], ambiguous=False))
+            plans.append(
+                dict(kind="unmappable", maps=[], old=[r], new=[], ambiguous=False, notes="")
+            )
     return plans
 
 
@@ -136,9 +126,14 @@ def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "-", name)
 
 
+def _case_id(api: str, schema: str, old_ref: str, new_ref: str, plan: dict) -> str:
+    """Stable id: independent of pair order and of other cases in the schema."""
+    key = json.dumps([old_ref, new_ref, sorted(plan["old"]), sorted(plan["new"])])
+    return f"{api}-{_slug(schema)}-{hashlib.sha256(key.encode()).hexdigest()[:8]}"
+
+
 def mine(source: Source, repo_dir: Path) -> list[Case]:
     cases: list[Case] = []
-    counters: dict[str, int] = defaultdict(int)
     for old_ref, new_ref in source.pairs:
         old_flat = flatten_schemas(fetch_spec(repo_dir, old_ref, source.spec_path))
         new_flat = flatten_schemas(fetch_spec(repo_dir, new_ref, source.spec_path))
@@ -150,11 +145,10 @@ def mine(source: Source, repo_dir: Path) -> list[Case]:
             unchanged = [p for p in sorted(old) if p in new and old[p] == new[p]]
             context = unchanged[:CONTEXT_FIELDS]
             for plan in _plan(old, new, d):
-                counters[schema] += 1
                 refuse = plan["kind"] == "unmappable"
                 cases.append(
                     Case(
-                        id=f"{source.api}-{_slug(schema)}-{counters[schema]}",
+                        id=_case_id(source.api, schema, old_ref, new_ref, plan),
                         api=source.api,
                         source={
                             "repo": source.repo_url,
@@ -172,6 +166,7 @@ def mine(source: Source, repo_dir: Path) -> list[Case]:
                         ],
                         label_status="drafted",
                         ambiguous=plan["ambiguous"],
+                        notes=plan["notes"],
                     )
                 )
     return cases

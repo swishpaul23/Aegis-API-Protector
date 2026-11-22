@@ -1,6 +1,7 @@
 import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -95,8 +96,66 @@ def test_mine_pairs_rename_and_move(cases: list[Case]):
 def test_mine_flags_ambiguous_pairing(cases: list[Case]):
     contact = _by_schema(cases, "Contact")
     assert len(contact) == 1
-    assert contact[0].ambiguous is True
-    assert contact[0].expected == "repair"
+    c = contact[0]
+    assert c.ambiguous is True
+    assert c.expected == "repair"
+    assert c.maps == []
+    assert {"phone_a", "phone_b"} <= set(c.old_fields)
+    assert {"phone_c", "phone_d"} <= set(c.new_fields)
+    for edge in ("phone_a->{phone_c:", "phone_b->{phone_c:", ",phone_d:"):
+        assert edge in c.notes
+    assert c.notes.count("phone_c:") == 2 and c.notes.count("phone_d:") == 2
+
+
+def test_mine_two_removed_one_added_keeps_both_removed(tmp_path: Path):
+    r = tmp_path / "r"
+    r.mkdir()
+    _git(r, "init", "-q")
+
+    def spec(props: dict) -> str:
+        return json.dumps({"components": {"schemas": {"S": {"properties": props}}}})
+
+    s = {"type": "string"}
+    (r / SPEC_PATH).write_text(spec({"phone_a": s, "phone_b": s}))
+    _git(r, "add", ".")
+    _git(r, "commit", "-q", "-m", "o")
+    _git(r, "tag", "o")
+    (r / SPEC_PATH).write_text(spec({"phone_c": s}))
+    _git(r, "commit", "-qam", "n")
+    out = mine(Source("fx", "u", SPEC_PATH, [("o", "HEAD")]), r)
+    assert len(out) == 1 and out[0].ambiguous and out[0].maps == []
+    assert set(out[0].old_fields) == {"phone_a", "phone_b"}
+    assert set(out[0].new_fields) == {"phone_c"}
+
+
+def test_ids_stable_under_pair_order(repo: Path):
+    a = Source("fx", "u", SPEC_PATH, [("old", "new"), ("old", "HEAD")])
+    b = Source("fx", "u", SPEC_PATH, [("old", "HEAD"), ("old", "new")])
+    ids_a = [c.id for c in mine(a, repo)]
+    assert len(set(ids_a)) == len(ids_a)
+    assert sorted(ids_a) == sorted(c.id for c in mine(b, repo))
+
+
+def test_fetch_spec_rejects_option_like_ref(repo: Path):
+    with pytest.raises(ValueError):
+        fetch_spec(repo, "--output=/tmp/x", SPEC_PATH)
+
+
+def test_flatten_fanout_is_bounded():
+    n = 30
+    schemas = {}
+    for i in range(n):
+        props = {f"s{j}": {"type": "string"} for j in range(10)}
+        props.update(
+            {f"r{j}": {"$ref": f"#/components/schemas/S{(i + j + 1) % n}"} for j in range(15)}
+        )
+        schemas[f"S{i}"] = {"type": "object", "properties": props}
+    t = time.monotonic()
+    flat = flatten_schemas({"components": {"schemas": schemas}})
+    assert time.monotonic() - t < 2
+    assert all(len(f) <= 2000 for f in flat.values())
+    assert flat["S0"]["r0.s0"] == "string"
+    assert not any(p.count(".") > 1 for p in flat["S0"])  # refs are one hop
 
 
 def test_mine_emits_unmappable_for_orphan_removed_field(cases: list[Case]):
@@ -113,7 +172,7 @@ def test_all_mined_cases_are_drafted(cases: list[Case]):
     ids = [c.id for c in cases]
     assert len(set(ids)) == len(ids)
     assert all(i.startswith("fx-") for i in ids)
-    assert "fx-Contact-1" in ids
+    assert any(i.startswith("fx-Contact-") and len(i) == len("fx-Contact-") + 8 for i in ids)
     assert cases[0].source["old_ref"] == "old" and cases[0].source["schema"]
 
 
