@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-deleted_discount-683c4b90",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "checkout_session": "string",
+    "deleted": "boolean",
+    "id": "string",
+    "invoice": "string",
+    "invoice_item": "string",
+    "object": "string",
+    "source.type": "string",
+    "start": "integer",
+    "subscription": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "checkout_session": "string",
+    "coupon.id": "string",
+    "deleted": "boolean",
+    "id": "string",
+    "invoice": "string",
+    "invoice_item": "string",
+    "object": "string",
+    "start": "integer",
+    "subscription": "string"
+  },
+  "source": {
+    "new_ref": "053c4b35b25f",
+    "old_ref": "7ad98dc0f5a6",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "deleted_discount",
+    "spec_path": "openapi/spec3.json"
+  }
+}

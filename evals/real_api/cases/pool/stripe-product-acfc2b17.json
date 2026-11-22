@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-product-acfc2b17",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "active": "boolean",
+    "caption": "string",
+    "created": "integer",
+    "description": "string",
+    "id": "string",
+    "livemode": "boolean",
+    "name": "string",
+    "object": "string",
+    "unit_label": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "active": "boolean",
+    "caption": "string",
+    "created": "integer",
+    "description": "string",
+    "id": "string",
+    "livemode": "boolean",
+    "name": "string",
+    "object": "string",
+    "skus.object": "string"
+  },
+  "source": {
+    "new_ref": "3d3b4d502c30",
+    "old_ref": "a6e77620fd70",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "product",
+    "spec_path": "openapi/spec3.json"
+  }
+}

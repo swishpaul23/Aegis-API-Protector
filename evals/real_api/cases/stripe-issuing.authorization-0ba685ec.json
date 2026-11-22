@@ -1,0 +1,45 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-issuing.authorization-0ba685ec",
+  "kind": "unmappable",
+  "label_status": "confirmed",
+  "maps": [],
+  "new_fields": {
+    "amount": "integer",
+    "approved": "boolean",
+    "authorization_method": "string",
+    "card.brand": "string",
+    "card.cancellation_reason": "string",
+    "card.created": "integer",
+    "card.currency": "string",
+    "card.exp_month": "integer",
+    "card.exp_year": "integer",
+    "card.id": "string",
+    "currency": "string",
+    "merchant_amount": "integer",
+    "merchant_currency": "string",
+    "verification_data.address_postal_code_check": "string",
+    "wallet": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "approved": "boolean",
+    "authorization_method": "string",
+    "card.brand": "string",
+    "card.created": "integer",
+    "card.currency": "string",
+    "card.exp_month": "integer",
+    "card.exp_year": "integer",
+    "card.id": "string",
+    "pending_authorized_amount": "integer"
+  },
+  "source": {
+    "new_ref": "34ddc7feabef",
+    "old_ref": "a63555d40ae5",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "issuing.authorization",
+    "spec_path": "openapi/spec3.json"
+  }
+}

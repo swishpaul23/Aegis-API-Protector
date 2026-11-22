@@ -1,0 +1,28 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-account_capabilities-24006136",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "card_issuing": "string",
+    "card_payments": "string",
+    "legacy_payments": "string",
+    "transfers": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "card_payments": "string",
+    "legacy_payments": "string",
+    "platform_payments": "string"
+  },
+  "source": {
+    "new_ref": "61454d918c9e",
+    "old_ref": "c806fa1f987e",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "account_capabilities",
+    "spec_path": "openapi/spec3.json"
+  }
+}

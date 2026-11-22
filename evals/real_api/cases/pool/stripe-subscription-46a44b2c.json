@@ -1,0 +1,40 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-subscription-46a44b2c",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "application_fee_percent": "number",
+    "billing_cycle_anchor": "integer",
+    "cancel_at": "integer",
+    "cancel_at_period_end": "boolean",
+    "canceled_at": "integer",
+    "collection_method": "string",
+    "created": "integer",
+    "current_period_end": "integer",
+    "current_period_start": "integer",
+    "next_pending_invoice_item_invoice": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "application_fee_percent": "number",
+    "billing_cycle_anchor": "integer",
+    "cancel_at_period_end": "boolean",
+    "canceled_at": "integer",
+    "collection_method": "string",
+    "created": "integer",
+    "current_period_end": "integer",
+    "current_period_start": "integer",
+    "start": "integer"
+  },
+  "source": {
+    "new_ref": "61454d918c9e",
+    "old_ref": "c806fa1f987e",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "subscription",
+    "spec_path": "openapi/spec3.json"
+  }
+}

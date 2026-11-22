@@ -1,0 +1,40 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-app-permissions-4153b349",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "actions": "string",
+    "administration": "string",
+    "checks": "string",
+    "contents": "string",
+    "deployments": "string",
+    "environments": "string",
+    "issues": "string",
+    "members": "string",
+    "organization_personal_access_token_requests": "string",
+    "organization_personal_access_tokens": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "actions": "string",
+    "administration": "string",
+    "checks": "string",
+    "contents": "string",
+    "deployments": "string",
+    "environments": "string",
+    "issues": "string",
+    "members": "string",
+    "repository_announcement_banners": "string"
+  },
+  "source": {
+    "new_ref": "a696ff15ec55",
+    "old_ref": "3bb64cfb4aae",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "app-permissions",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-repository-collaborator-permission-3d8a0fd8",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "permission": "string",
+    "role_name": "string",
+    "user.avatar_url": "string",
+    "user.email": "string",
+    "user.events_url": "string",
+    "user.followers_url": "string",
+    "user.following_url": "string",
+    "user.gists_url": "string",
+    "user.gravatar_id": "string",
+    "user.permissions.admin": "boolean",
+    "user.permissions.maintain": "boolean",
+    "user.permissions.pull": "boolean",
+    "user.permissions.push": "boolean",
+    "user.permissions.triage": "boolean",
+    "user.role_name": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "permission": "string",
+    "user.avatar_url": "string",
+    "user.email": "string",
+    "user.events_url": "string",
+    "user.followers_url": "string",
+    "user.following_url": "string",
+    "user.gists_url": "string",
+    "user.gravatar_id": "string",
+    "user.starred_at": "string"
+  },
+  "source": {
+    "new_ref": "c177fb08c8ab",
+    "old_ref": "b60d51b633c1",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "repository-collaborator-permission",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

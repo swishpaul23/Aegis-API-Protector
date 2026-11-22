@@ -1,0 +1,36 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-issuing_transaction_fuel_data-1fc52bcb",
+  "kind": "rename",
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "quantity_decimal",
+      "target": "volume_decimal"
+    }
+  ],
+  "new_fields": {
+    "industry_product_code": "string",
+    "quantity_decimal": "string",
+    "type": "string",
+    "unit": "string",
+    "unit_cost_decimal": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "type": "string",
+    "unit": "string",
+    "unit_cost_decimal": "string",
+    "volume_decimal": "string"
+  },
+  "source": {
+    "new_ref": "f08f82980bcb",
+    "old_ref": "6eb2683a3fb3",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "issuing_transaction_fuel_data",
+    "spec_path": "openapi/spec3.json"
+  }
+}

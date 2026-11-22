@@ -1,0 +1,73 @@
+{
+  "ambiguous": true,
+  "api": "github",
+  "expected": "repair",
+  "id": "github-actions-billing-usage-7710a4f6",
+  "kind": "rename",
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "minutes_used_breakdown.ubuntu_4_core",
+      "target": "minutes_used_breakdown.linux_4_core"
+    },
+    {
+      "convert": "none",
+      "source": "minutes_used_breakdown.ubuntu_8_core",
+      "target": "minutes_used_breakdown.linux_8_core"
+    },
+    {
+      "convert": "none",
+      "source": "minutes_used_breakdown.ubuntu_16_core",
+      "target": "minutes_used_breakdown.linux_16_core"
+    },
+    {
+      "convert": "none",
+      "source": "minutes_used_breakdown.ubuntu_32_core",
+      "target": "minutes_used_breakdown.linux_32_core"
+    },
+    {
+      "convert": "none",
+      "source": "minutes_used_breakdown.ubuntu_64_core",
+      "target": "minutes_used_breakdown.linux_64_core"
+    }
+  ],
+  "new_fields": {
+    "included_minutes": "integer",
+    "minutes_used_breakdown.MACOS": "integer",
+    "minutes_used_breakdown.UBUNTU": "integer",
+    "minutes_used_breakdown.WINDOWS": "integer",
+    "minutes_used_breakdown.total": "integer",
+    "minutes_used_breakdown.ubuntu_16_core": "integer",
+    "minutes_used_breakdown.ubuntu_32_core": "integer",
+    "minutes_used_breakdown.ubuntu_4_core": "integer",
+    "minutes_used_breakdown.ubuntu_64_core": "integer",
+    "minutes_used_breakdown.ubuntu_8_core": "integer",
+    "minutes_used_breakdown.windows_16_core": "integer",
+    "minutes_used_breakdown.windows_32_core": "integer",
+    "minutes_used_breakdown.windows_4_core": "integer"
+  },
+  "notes": "candidates: minutes_used_breakdown.linux_16_core->{minutes_used_breakdown.ubuntu_16_core:0.74,minutes_used_breakdown.ubuntu_4_core:0.62,minutes_used_breakdown.ubuntu_64_core:0.67,minutes_used_breakdown.ubuntu_8_core:0.62}; minutes_used_breakdown.linux_32_core->{minutes_used_breakdown.ubuntu_32_core:0.74,minutes_used_breakdown.ubuntu_4_core:0.62,minutes_used_breakdown.ubuntu_8_core:0.62}; minutes_used_breakdown.linux_4_core->{minutes_used_breakdown.ubuntu_16_core:0.62,minutes_used_breakdown.ubuntu_32_core:0.62,minutes_used_breakdown.ubuntu_4_core:0.72,minutes_used_breakdown.ubuntu_64_core:0.69,minutes_used_breakdown.ubuntu_8_core:0.64}; minutes_used_breakdown.linux_64_core->{minutes_used_breakdown.ubuntu_16_core:0.67,minutes_used_breakdown.ubuntu_4_core:0.69,minutes_used_breakdown.ubuntu_64_core:0.74,minutes_used_breakdown.ubuntu_8_core:0.62}; minutes_used_breakdown.linux_8_core->{minutes_used_breakdown.ubuntu_16_core:0.62,minutes_used_breakdown.ubuntu_32_core:0.62,minutes_used_breakdown.ubuntu_4_core:0.64,minutes_used_breakdown.ubuntu_64_core:0.62,minutes_used_breakdown.ubuntu_8_core:0.72}",
+  "old_fields": {
+    "included_minutes": "integer",
+    "minutes_used_breakdown.MACOS": "integer",
+    "minutes_used_breakdown.UBUNTU": "integer",
+    "minutes_used_breakdown.WINDOWS": "integer",
+    "minutes_used_breakdown.linux_16_core": "integer",
+    "minutes_used_breakdown.linux_32_core": "integer",
+    "minutes_used_breakdown.linux_4_core": "integer",
+    "minutes_used_breakdown.linux_64_core": "integer",
+    "minutes_used_breakdown.linux_8_core": "integer",
+    "minutes_used_breakdown.total": "integer",
+    "minutes_used_breakdown.windows_16_core": "integer",
+    "minutes_used_breakdown.windows_32_core": "integer",
+    "minutes_used_breakdown.windows_4_core": "integer"
+  },
+  "source": {
+    "new_ref": "e557d0fee9d6",
+    "old_ref": "e6ab68d6748a",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "actions-billing-usage",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

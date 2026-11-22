@@ -1,0 +1,29 @@
+{
+  "ambiguous": false,
+  "api": "box",
+  "expected": "repair",
+  "id": "box-FolderLocks-fe7877dd",
+  "kind": "retype",
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "int_str",
+      "source": "limit",
+      "target": "limit"
+    }
+  ],
+  "new_fields": {
+    "limit": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "limit": "integer"
+  },
+  "source": {
+    "new_ref": "8496c0af7ed7",
+    "old_ref": "563b6f79bc87",
+    "repo": "https://github.com/box/box-openapi",
+    "schema": "FolderLocks",
+    "spec_path": "openapi.json"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-error-f8b5ed94",
+  "kind": "move",
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "error.decline_code",
+      "target": "decline_code"
+    }
+  ],
+  "new_fields": {
+    "error.charge": "string",
+    "error.code": "string",
+    "error.decline_code": "string",
+    "error.message": "string",
+    "error.param": "string",
+    "error.type": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "decline_code": "string"
+  },
+  "source": {
+    "new_ref": "a6e77620fd70",
+    "old_ref": "e069733bf620",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "error",
+    "spec_path": "openapi/spec3.json"
+  }
+}

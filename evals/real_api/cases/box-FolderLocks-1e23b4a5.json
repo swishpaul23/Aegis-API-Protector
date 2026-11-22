@@ -1,0 +1,21 @@
+{
+  "ambiguous": false,
+  "api": "box",
+  "expected": "refuse",
+  "id": "box-FolderLocks-1e23b4a5",
+  "kind": "unmappable",
+  "label_status": "confirmed",
+  "maps": [],
+  "new_fields": {},
+  "notes": "",
+  "old_fields": {
+    "prev_marker": "integer"
+  },
+  "source": {
+    "new_ref": "8496c0af7ed7",
+    "old_ref": "563b6f79bc87",
+    "repo": "https://github.com/box/box-openapi",
+    "schema": "FolderLocks",
+    "spec_path": "openapi.json"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-rate-limit-overview-10c3e882",
+  "kind": "unmappable",
+  "label_status": "confirmed",
+  "maps": [],
+  "new_fields": {
+    "rate.limit": "integer",
+    "rate.remaining": "integer",
+    "rate.reset": "integer",
+    "rate.used": "integer",
+    "resources.actions_runner_registration.limit": "integer",
+    "resources.actions_runner_registration.remaining": "integer",
+    "resources.actions_runner_registration.reset": "integer",
+    "resources.actions_runner_registration.used": "integer",
+    "resources.copilot_usage_records.limit": "integer",
+    "resources.copilot_usage_records.remaining": "integer",
+    "resources.copilot_usage_records.reset": "integer",
+    "resources.copilot_usage_records.used": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "rate.limit": "integer",
+    "rate.remaining": "integer",
+    "rate.reset": "integer",
+    "rate.used": "integer",
+    "resources.actions_runner_registration.limit": "integer",
+    "resources.actions_runner_registration.remaining": "integer",
+    "resources.actions_runner_registration.reset": "integer",
+    "resources.actions_runner_registration.used": "integer",
+    "resources.code_scanning_upload.used": "integer"
+  },
+  "source": {
+    "new_ref": "8e7e6ae3079f",
+    "old_ref": "f7700c7d55cf",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "rate-limit-overview",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

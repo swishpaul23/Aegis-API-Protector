@@ -1,0 +1,41 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-source_transaction_gbp_credit_transfer_data-095a9213",
+  "kind": "rename",
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "sender_sort_code",
+      "target": "sort_code"
+    }
+  ],
+  "new_fields": {
+    "fingerprint": "string",
+    "funding_method": "string",
+    "last4": "string",
+    "reference": "string",
+    "sender_account_number": "string",
+    "sender_name": "string",
+    "sender_sort_code": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "fingerprint": "string",
+    "funding_method": "string",
+    "last4": "string",
+    "reference": "string",
+    "sender_account_number": "string",
+    "sender_name": "string",
+    "sort_code": "string"
+  },
+  "source": {
+    "new_ref": "a63555d40ae5",
+    "old_ref": "056753af2601",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "source_transaction_gbp_credit_transfer_data",
+    "spec_path": "openapi/spec3.json"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-plan-2abf6ae7",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "amount": "integer",
+    "created": "integer",
+    "currency": "string",
+    "id": "string",
+    "interval": "string",
+    "interval_count": "integer",
+    "livemode": "boolean",
+    "nickname": "string",
+    "object": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "amount": "integer",
+    "created": "integer",
+    "currency": "string",
+    "id": "string",
+    "interval": "string",
+    "interval_count": "integer",
+    "livemode": "boolean",
+    "object": "string",
+    "statement_descriptor": "string"
+  },
+  "source": {
+    "new_ref": "a6e77620fd70",
+    "old_ref": "e069733bf620",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "plan",
+    "spec_path": "openapi/spec3.json"
+  }
+}

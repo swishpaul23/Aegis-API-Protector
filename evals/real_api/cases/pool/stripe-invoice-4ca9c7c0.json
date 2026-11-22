@@ -1,0 +1,43 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-invoice-4ca9c7c0",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "account_country": "string",
+    "account_name": "string",
+    "amount_due": "integer",
+    "amount_overpaid": "integer",
+    "amount_paid": "integer",
+    "amount_remaining": "integer",
+    "amount_shipping": "integer",
+    "attempt_count": "integer",
+    "attempted": "boolean",
+    "automatic_tax.provider": "string",
+    "payments.has_more": "boolean",
+    "payments.object": "string",
+    "payments.url": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "account_country": "string",
+    "account_name": "string",
+    "amount_due": "integer",
+    "amount_paid": "integer",
+    "amount_remaining": "integer",
+    "amount_shipping": "integer",
+    "attempt_count": "integer",
+    "attempted": "boolean",
+    "subscription_proration_date": "integer"
+  },
+  "source": {
+    "new_ref": "053c4b35b25f",
+    "old_ref": "7ad98dc0f5a6",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "invoice",
+    "spec_path": "openapi/spec3.json"
+  }
+}

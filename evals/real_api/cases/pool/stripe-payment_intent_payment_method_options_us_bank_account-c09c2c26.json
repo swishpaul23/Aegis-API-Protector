@@ -1,0 +1,33 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-payment_intent_payment_method_options_us_bank_account-c09c2c26",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "financial_connections.return_url": "string",
+    "mandate_options.collection_method": "string",
+    "setup_future_usage": "string",
+    "target_date": "string",
+    "transaction_purpose": "string",
+    "verification_method": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "financial_connections.return_url": "string",
+    "mandate_options.collection_method": "string",
+    "preferred_settlement_speed": "string",
+    "setup_future_usage": "string",
+    "target_date": "string",
+    "verification_method": "string"
+  },
+  "source": {
+    "new_ref": "f4ac6d9a7f40",
+    "old_ref": "053c4b35b25f",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "payment_intent_payment_method_options_us_bank_account",
+    "spec_path": "openapi/spec3.json"
+  }
+}

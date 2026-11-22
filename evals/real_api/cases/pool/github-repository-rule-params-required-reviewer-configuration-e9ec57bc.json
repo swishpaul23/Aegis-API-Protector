@@ -1,0 +1,26 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-repository-rule-params-required-reviewer-configuration-e9ec57bc",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "minimum_approvals": "integer",
+    "reviewer.id": "integer",
+    "reviewer.type": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "minimum_approvals": "integer",
+    "reviewer_id": "string"
+  },
+  "source": {
+    "new_ref": "8100b1f2f998",
+    "old_ref": "6445bc79e16f",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "repository-rule-params-required-reviewer-configuration",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

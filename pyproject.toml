@@ -43,7 +43,7 @@ aegis = "aegis_healer.cli:app"
 packages = ["src/aegis_healer"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["legacy", ".aegis", "**/.aegis", ".env", "examples/**/released.jsonl", ".superpowers"]
+exclude = ["legacy", ".aegis", "**/.aegis", ".env", "examples/**/released.jsonl", ".superpowers", "evals"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -60,3 +60,4 @@ ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S"]
+"evals/**" = ["S"]

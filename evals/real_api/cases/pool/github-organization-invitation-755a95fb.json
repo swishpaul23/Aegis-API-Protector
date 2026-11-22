@@ -1,0 +1,40 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-organization-invitation-755a95fb",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "created_at": "string",
+    "email": "string",
+    "failed_at": "string",
+    "failed_reason": "string",
+    "id": "integer",
+    "invitation_teams_url": "string",
+    "inviter.avatar_url": "string",
+    "inviter.email": "string",
+    "inviter.events_url": "string",
+    "inviter.name": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "created_at": "string",
+    "email": "string",
+    "failed_at": "string",
+    "failed_reason": "string",
+    "id": "integer",
+    "invitation_team_url": "string",
+    "invitation_teams_url": "string",
+    "inviter.avatar_url": "string",
+    "inviter.events_url": "string"
+  },
+  "source": {
+    "new_ref": "b60d51b633c1",
+    "old_ref": "5a5a1deffbc6",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "organization-invitation",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

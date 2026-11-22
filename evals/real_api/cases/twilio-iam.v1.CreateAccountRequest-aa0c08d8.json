@@ -1,0 +1,31 @@
+{
+  "ambiguous": false,
+  "api": "twilio",
+  "expected": "repair",
+  "id": "twilio-iam.v1.CreateAccountRequest-aa0c08d8",
+  "kind": "rename",
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "ownerId",
+      "target": "owner"
+    }
+  ],
+  "new_fields": {
+    "friendlyName": "string",
+    "ownerId": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "friendlyName": "string",
+    "owner": "string"
+  },
+  "source": {
+    "new_ref": "c8540465ecdf",
+    "old_ref": "7f0d627a9629",
+    "repo": "https://github.com/twilio/twilio-oai",
+    "schema": "iam.v1.CreateAccountRequest",
+    "spec_path": "spec/json/twilio_iam_v1.json"
+  }
+}

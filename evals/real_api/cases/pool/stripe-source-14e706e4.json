@@ -1,0 +1,49 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-source-14e706e4",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "ach_credit_transfer.account_number": "string",
+    "ach_credit_transfer.bank_name": "string",
+    "ach_credit_transfer.fingerprint": "string",
+    "ach_credit_transfer.refund_account_holder_name": "string",
+    "ach_credit_transfer.refund_account_holder_type": "string",
+    "ach_credit_transfer.refund_account_number": "string",
+    "ach_credit_transfer.refund_routing_number": "string",
+    "ach_credit_transfer.routing_number": "string",
+    "ach_credit_transfer.swift_code": "string",
+    "ach_debit.bank_name": "string",
+    "ach_debit.country": "string",
+    "ach_debit.fingerprint": "string",
+    "customer": "string",
+    "receiver.refund_attributes_method": "string",
+    "receiver.refund_attributes_status": "string",
+    "wechat.native_url": "string",
+    "wechat.prepay_id": "string",
+    "wechat.qr_code_url": "string",
+    "wechat.statement_descriptor": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "ach_credit_transfer.account_number": "string",
+    "ach_credit_transfer.bank_name": "string",
+    "ach_credit_transfer.fingerprint": "string",
+    "ach_credit_transfer.routing_number": "string",
+    "ach_credit_transfer.swift_code": "string",
+    "ach_debit.bank_name": "string",
+    "ach_debit.country": "string",
+    "ach_debit.fingerprint": "string",
+    "card_present.mid": "string"
+  },
+  "source": {
+    "new_ref": "07222e925811",
+    "old_ref": "3d3b4d502c30",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "source",
+    "spec_path": "openapi/spec3.json"
+  }
+}

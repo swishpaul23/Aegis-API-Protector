@@ -1,0 +1,51 @@
+{
+  "ambiguous": true,
+  "api": "github",
+  "expected": "repair",
+  "id": "github-webhook-pull-request-closed-9ceb32c3",
+  "kind": "move",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "action": "string",
+    "enterprise.avatar_url": "string",
+    "enterprise.created_at": "datetime",
+    "enterprise.description": "string",
+    "enterprise.html_url": "string",
+    "enterprise.id": "integer",
+    "enterprise.name": "string",
+    "enterprise.node_id": "string",
+    "pull_request.allow_auto_merge": "boolean",
+    "pull_request.allow_update_branch": "boolean",
+    "pull_request.base.repo.has_discussions": "boolean",
+    "pull_request.base.repo.temp_clone_token": "string",
+    "pull_request.delete_branch_on_merge": "boolean",
+    "pull_request.head.repo.has_discussions": "boolean",
+    "pull_request.head.repo.temp_clone_token": "string",
+    "pull_request.merge_commit_message": "string",
+    "pull_request.merge_commit_title": "string",
+    "pull_request.squash_merge_commit_message": "string",
+    "pull_request.squash_merge_commit_title": "string",
+    "pull_request.use_squash_pr_title_as_default": "boolean"
+  },
+  "notes": "candidates: pull_request.base.repo.allow_update_branch->{pull_request.allow_update_branch:1.00}; pull_request.head.repo.allow_update_branch->{pull_request.allow_update_branch:1.00}",
+  "old_fields": {
+    "action": "string",
+    "enterprise.avatar_url": "string",
+    "enterprise.created_at": "datetime",
+    "enterprise.description": "string",
+    "enterprise.html_url": "string",
+    "enterprise.id": "integer",
+    "enterprise.name": "string",
+    "enterprise.node_id": "string",
+    "pull_request.base.repo.allow_update_branch": "boolean",
+    "pull_request.head.repo.allow_update_branch": "boolean"
+  },
+  "source": {
+    "new_ref": "3bb64cfb4aae",
+    "old_ref": "cd2a87452008",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "webhook-pull-request-closed",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

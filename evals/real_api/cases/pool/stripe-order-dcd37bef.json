@@ -1,0 +1,55 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-order-dcd37bef",
+  "kind": "move",
+  "label_status": "drafted",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "line_items.has_more",
+      "target": "returns.has_more"
+    }
+  ],
+  "new_fields": {
+    "amount_subtotal": "integer",
+    "amount_total": "integer",
+    "automatic_tax.enabled": "boolean",
+    "automatic_tax.status": "string",
+    "client_secret": "string",
+    "created": "integer",
+    "currency": "string",
+    "description": "string",
+    "id": "string",
+    "ip_address": "string",
+    "line_items.has_more": "boolean",
+    "line_items.object": "string",
+    "line_items.url": "string",
+    "livemode": "boolean",
+    "object": "string",
+    "payment.status": "string",
+    "status": "string",
+    "tax_details.tax_exempt": "string",
+    "total_details.amount_discount": "integer",
+    "total_details.amount_shipping": "integer",
+    "total_details.amount_tax": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "created": "integer",
+    "currency": "string",
+    "id": "string",
+    "livemode": "boolean",
+    "object": "string",
+    "returns.has_more": "boolean",
+    "status": "string"
+  },
+  "source": {
+    "new_ref": "af0f6ff8ee71",
+    "old_ref": "ac382e82727b",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "order",
+    "spec_path": "openapi/spec3.json"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-issuing_card_shipping-87f899fe",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "address.city": "string",
+    "address.country": "string",
+    "address.line1": "string",
+    "address.line2": "string",
+    "address.postal_code": "string",
+    "address.state": "string",
+    "carrier": "string",
+    "eta": "integer",
+    "type": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "address.city": "string",
+    "address.country": "string",
+    "address.line1": "string",
+    "address.line2": "string",
+    "address.postal_code": "string",
+    "address.state": "string",
+    "carrier": "string",
+    "eta": "integer",
+    "phone": "string"
+  },
+  "source": {
+    "new_ref": "c806fa1f987e",
+    "old_ref": "07222e925811",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "issuing_card_shipping",
+    "spec_path": "openapi/spec3.json"
+  }
+}

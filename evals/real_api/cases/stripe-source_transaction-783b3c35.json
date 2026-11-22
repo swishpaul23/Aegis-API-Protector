@@ -1,0 +1,53 @@
+{
+  "ambiguous": true,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-source_transaction-783b3c35",
+  "kind": "unmappable",
+  "label_status": "confirmed",
+  "maps": [],
+  "new_fields": {
+    "ach_credit_transfer.customer_data": "string",
+    "ach_credit_transfer.fingerprint": "string",
+    "ach_credit_transfer.last4": "string",
+    "ach_credit_transfer.routing_number": "string",
+    "amount": "integer",
+    "chf_credit_transfer.reference": "string",
+    "chf_credit_transfer.sender_address_country": "string",
+    "chf_credit_transfer.sender_address_line1": "string",
+    "chf_credit_transfer.sender_iban": "string",
+    "chf_credit_transfer.sender_name": "string",
+    "created": "integer",
+    "currency": "string",
+    "id": "string",
+    "livemode": "boolean",
+    "object": "string",
+    "paper_check.available_at": "string",
+    "paper_check.invoices": "string",
+    "sepa_credit_transfer.reference": "string",
+    "sepa_credit_transfer.sender_iban": "string",
+    "sepa_credit_transfer.sender_name": "string"
+  },
+  "notes": "candidates: eps.reference->{chf_credit_transfer.reference:1.00,sepa_credit_transfer.reference:1.00}; multibanco.reference->{chf_credit_transfer.reference:1.00,sepa_credit_transfer.reference:1.00}; p24.reference->{chf_credit_transfer.reference:1.00,sepa_credit_transfer.reference:1.00}; sepa_debit.mandate_reference->{chf_credit_transfer.reference:0.69,sepa_credit_transfer.reference:0.69}",
+  "old_fields": {
+    "ach_credit_transfer.fingerprint": "string",
+    "ach_credit_transfer.routing_number": "string",
+    "amount": "integer",
+    "created": "integer",
+    "currency": "string",
+    "eps.reference": "string",
+    "id": "string",
+    "livemode": "boolean",
+    "multibanco.reference": "string",
+    "object": "string",
+    "p24.reference": "string",
+    "sepa_debit.mandate_reference": "string"
+  },
+  "source": {
+    "new_ref": "07222e925811",
+    "old_ref": "3d3b4d502c30",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "source_transaction",
+    "spec_path": "openapi/spec3.json"
+  }
+}

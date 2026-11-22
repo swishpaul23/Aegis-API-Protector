@@ -1,0 +1,54 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-invoice-578c9459",
+  "kind": "rename",
+  "label_status": "confirmed",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "application_fee_amount",
+      "target": "application_fee"
+    }
+  ],
+  "new_fields": {
+    "amount_due": "integer",
+    "amount_paid": "integer",
+    "amount_remaining": "integer",
+    "application_fee_amount": "integer",
+    "attempt_count": "integer",
+    "attempted": "boolean",
+    "auto_advance": "boolean",
+    "billing": "string",
+    "billing_reason": "string",
+    "created": "integer",
+    "finalized_at": "integer",
+    "footer": "string",
+    "status": "string",
+    "status_transitions.finalized_at": "integer",
+    "status_transitions.marked_uncollectible_at": "integer",
+    "status_transitions.paid_at": "integer",
+    "status_transitions.voided_at": "integer",
+    "threshold_reason.amount_gte": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "amount_due": "integer",
+    "amount_paid": "integer",
+    "amount_remaining": "integer",
+    "application_fee": "integer",
+    "attempt_count": "integer",
+    "attempted": "boolean",
+    "auto_advance": "boolean",
+    "billing": "string",
+    "billing_reason": "string"
+  },
+  "source": {
+    "new_ref": "07222e925811",
+    "old_ref": "3d3b4d502c30",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "invoice",
+    "spec_path": "openapi/spec3.json"
+  }
+}

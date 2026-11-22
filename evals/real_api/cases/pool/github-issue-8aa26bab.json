@@ -1,0 +1,44 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-issue-8aa26bab",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "active_lock_reason": "string",
+    "assignee.avatar_url": "string",
+    "assignee.email": "string",
+    "assignee.events_url": "string",
+    "assignee.followers_url": "string",
+    "assignee.following_url": "string",
+    "assignee.gists_url": "string",
+    "assignee.gravatar_id": "string",
+    "issue_dependencies_summary.blocked_by": "integer",
+    "issue_dependencies_summary.blocking": "integer",
+    "issue_dependencies_summary.total_blocked_by": "integer",
+    "issue_dependencies_summary.total_blocking": "integer",
+    "repository.code_search_index_status.lexical_commit_sha": "string",
+    "repository.code_search_index_status.lexical_search_ok": "boolean"
+  },
+  "notes": "",
+  "old_fields": {
+    "active_lock_reason": "string",
+    "assignee.avatar_url": "string",
+    "assignee.email": "string",
+    "assignee.events_url": "string",
+    "assignee.followers_url": "string",
+    "assignee.following_url": "string",
+    "assignee.gists_url": "string",
+    "assignee.gravatar_id": "string",
+    "performed_via_github_app.pem": "string"
+  },
+  "source": {
+    "new_ref": "22387721d96e",
+    "old_ref": "7ce7a693e5e4",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "issue",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

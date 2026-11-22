@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-issuing.settlement-99a47a26",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "bin": "string",
+    "clearing_date": "integer",
+    "created": "integer",
+    "currency": "string",
+    "id": "string",
+    "interchange_fees": "integer",
+    "livemode": "boolean",
+    "net_total": "integer",
+    "network_fees": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "bin": "string",
+    "created": "integer",
+    "currency": "string",
+    "id": "string",
+    "interchange_fees": "integer",
+    "livemode": "boolean",
+    "net_total": "integer",
+    "network_fees": "integer",
+    "settlement_date": "integer"
+  },
+  "source": {
+    "new_ref": "c806fa1f987e",
+    "old_ref": "07222e925811",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "issuing.settlement",
+    "spec_path": "openapi/spec3.json"
+  }
+}

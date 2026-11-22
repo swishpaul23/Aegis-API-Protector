@@ -1,0 +1,25 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-interaction-limit-e537de06",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "expiry": "string",
+    "limit": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "expires_at": "datetime",
+    "limit": "string"
+  },
+  "source": {
+    "new_ref": "5a5a1deffbc6",
+    "old_ref": "00a39efd0467",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "interaction-limit",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

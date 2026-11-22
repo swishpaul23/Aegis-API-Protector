@@ -1,0 +1,43 @@
+{
+  "openapi": "3.0.0",
+  "components": {
+    "schemas": {
+      "Widget": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "full_name": {"type": "string"},
+          "count": {"type": "integer"},
+          "legacy_flag": {"type": "boolean"},
+          "updated_at": {"type": "string", "format": "date-time"},
+          "owner": {"$ref": "#/components/schemas/User"},
+          "tags": {"type": "array", "items": {"type": "object", "properties": {"x": {"type": "string"}}}},
+          "extra": {"oneOf": [{"type": "string"}, {"type": "integer"}]}
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {"login": {"type": "string"}}
+      },
+      "Node": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "parent": {"$ref": "#/components/schemas/Node"}
+        }
+      },
+      "Contact": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "phone_a": {"type": "string"},
+          "phone_b": {"type": "string"}
+        }
+      },
+      "Stable": {
+        "type": "object",
+        "properties": {"id": {"type": "integer"}}
+      }
+    }
+  }
+}
