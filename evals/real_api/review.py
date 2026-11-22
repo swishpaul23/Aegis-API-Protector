@@ -70,22 +70,32 @@ def render_review(cases_dir: Path, out: Path) -> None:
     Path(out).write_text(_INTRO + HEADER + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
 
 
-def _parse_rows(review: Path) -> dict[str, tuple[bool, bool, str]]:
+_ID = re.compile(r"^\|\s*`([^`]+)`")
+
+
+def _parse_rows(
+    review: Path,
+) -> tuple[dict[str, tuple[bool, bool, str]], list[str]]:
+    """Return parsed rows by id, plus raw data-row lines that failed to parse."""
     rows: dict[str, tuple[bool, bool, str]] = {}
+    malformed: list[str] = []
     for line in Path(review).read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in _SPLIT.split(line)[1:-1]]
-        if len(cells) != 10 or not (m := re.fullmatch(r"`(.+)`", cells[0])):
+        if cells and (cells[0] == "id" or set(cells[0]) <= {"-", ":"}):
+            continue  # header or separator
+        m = re.fullmatch(r"`(.+)`", cells[0]) if cells else None
+        if len(cells) != 10 or not line.endswith("|") or not m or m.group(1) in rows:
+            malformed.append(line)
             continue
-        fix = cells[9].replace("\\|", "|")
         rows[m.group(1)] = (
             bool(_TICK.match(cells[7])),
             bool(_TICK.match(cells[8])),
-            fix,
+            cells[9].replace("\\|", "|"),
         )
-    return rows
+    return rows, malformed
 
 
 def _parse_fix(text: str) -> tuple[str, list[ExpectedMap]]:
@@ -111,6 +121,9 @@ def _parse_fix(text: str) -> tuple[str, list[ExpectedMap]]:
 
 def _apply_fix(case: Case, text: str) -> Case:
     expected, maps = _parse_fix(text)
+    targets = [m.target for m in maps]
+    if len(set(targets)) != len(targets):
+        raise ValueError("duplicate target in fix")
     for m in maps:
         if m.target not in case.old_fields:
             raise ValueError(f"target {m.target!r} not in old_fields")
@@ -127,17 +140,29 @@ def apply_review(cases_dir: Path, review: Path) -> dict[str, list[str] | int]:
 
     Only drafted cases are considered, so re-applying a file is a no-op for settled cases.
     Returns id lists ``confirmed``, ``rejected`` (confirm ticked on a case with no maps),
-    ``needs_fix`` (fix ticked, fix column empty) and ``errors`` (``"id: reason"``), plus
+    ``needs_fix`` (fix ticked, fix column empty), ``errors`` (``"id: reason"``), ``missing``
+    (drafted cases with no row) and ``malformed`` (raw unparseable data rows), plus
     ``n_<name>`` counts for each and ``n_unchanged`` (drafted cases left as they were).
     """
-    rows = _parse_rows(review)
-    res: dict[str, list[str]] = {k: [] for k in ("confirmed", "rejected", "needs_fix", "errors")}
+    rows, malformed = _parse_rows(review)
+    res: dict[str, list[str]] = {
+        k: [] for k in ("confirmed", "rejected", "needs_fix", "errors", "missing")
+    }
     unchanged = 0
     known = {c.id: c for c in load_cases(cases_dir)}
+    bad_ids = set()
+    for line in malformed:
+        m = _ID.match(line)
+        if m and m.group(1) in known:
+            bad_ids.add(m.group(1))
+            res["errors"].append(f"{m.group(1)}: malformed row")
     for cid in sorted(set(rows) - set(known)):
         res["errors"].append(f"{cid}: no such case")
     for cid, case in sorted(known.items()):
-        if case.label_status != "drafted" or cid not in rows:
+        if case.label_status != "drafted" or cid in bad_ids:
+            continue
+        if cid not in rows:
+            res["missing"].append(cid)
             continue
         confirm, fix_mark, fix = rows[cid]
         if fix:
@@ -146,6 +171,9 @@ def apply_review(cases_dir: Path, review: Path) -> dict[str, list[str] | int]:
             except (ValueError, ValidationError) as e:
                 res["errors"].append(f"{cid}: {str(e).splitlines()[0]}")
                 continue
+        elif confirm and fix_mark:
+            res["errors"].append(f"{cid}: contradictory ticks")
+            continue
         elif confirm:
             if case.ambiguous or (case.expected == "repair" and not case.maps):
                 res["rejected"].append(cid)
@@ -160,7 +188,8 @@ def apply_review(cases_dir: Path, review: Path) -> dict[str, list[str] | int]:
         save_case(new, cases_dir)
         res["confirmed"].append(cid)
     out: dict[str, list[str] | int] = dict(res)
-    for k, v in res.items():
+    out["malformed"] = malformed
+    for k, v in {**res, "malformed": malformed}.items():
         out[f"n_{k}"] = len(v)
     out["n_unchanged"] = unchanged
     return out

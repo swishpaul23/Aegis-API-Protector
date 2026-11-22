@@ -169,3 +169,81 @@ def test_rows_matched_by_id_not_position(tmp_path):
     apply_review(d, rv)
     cases = _by_id(d)
     assert cases["two"].label_status == "confirmed" and cases["one"].label_status == "drafted"
+
+
+def _rewrite(review: Path, cid: str, fn) -> None:
+    lines = review.read_text(encoding="utf-8").splitlines()
+    lines = [fn(ln) if f"`{cid}`" in ln else ln for ln in lines]
+    review.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_unescaped_pipe_in_fix_is_reported(tmp_path):
+    d, rv = _setup(tmp_path, _case("one"))
+    render_review(d, rv)
+    _rewrite(rv, "one", lambda ln: ln.rstrip()[:-1] + " a<-b | x |")
+    res = apply_review(d, rv)
+    assert res["n_malformed"] == 1 and res["errors"] == ["one: malformed row"]
+    assert _by_id(d)["one"].label_status == "drafted"
+
+
+def test_deleted_trailing_pipe_is_reported(tmp_path):
+    d, rv = _setup(tmp_path, _case("one"))
+    render_review(d, rv)
+    _edit(rv, "one", confirm=True)
+    _rewrite(rv, "one", lambda ln: ln.rstrip()[:-1].rstrip())
+    res = apply_review(d, rv)
+    assert res["n_malformed"] == 1 and res["n_errors"] == 1
+    assert _by_id(d)["one"].label_status == "drafted"
+
+
+def test_deleted_row_is_missing(tmp_path):
+    d, rv = _setup(tmp_path, _case("one"), _case("two"))
+    render_review(d, rv)
+    lines = [ln for ln in rv.read_text(encoding="utf-8").splitlines() if "`two`" not in ln]
+    rv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    res = apply_review(d, rv)
+    assert res["missing"] == ["two"] and res["n_missing"] == 1
+
+
+def test_stripped_id_backtick_is_malformed(tmp_path):
+    d, rv = _setup(tmp_path, _case("one"))
+    render_review(d, rv)
+    _rewrite(rv, "one", lambda ln: ln.replace("`one`", "one"))
+    res = apply_review(d, rv)
+    assert res["n_malformed"] == 1 and res["missing"] == ["one"]
+
+
+def test_render_apply_roundtrip_with_pipe_in_notes(tmp_path):
+    d, rv = _setup(tmp_path, _ambiguous("amb"))
+    render_review(d, rv)
+    _edit(rv, "amb", fix="a<-b")
+    res = apply_review(d, rv)
+    assert res["confirmed"] == ["amb"] and res["n_malformed"] == 0
+    assert _by_id(d)["amb"].notes == "a->b 0.9 | a->d 0.8"
+
+
+def test_escaped_pipe_in_fix_is_unescaped_then_errors(tmp_path):
+    d, rv = _setup(tmp_path, _case("one"))
+    render_review(d, rv)
+    _edit(rv, "one", fix="a<-b\\|x")
+    res = apply_review(d, rv)
+    assert res["n_errors"] == 1 and res["n_malformed"] == 0
+    assert _by_id(d)["one"].label_status == "drafted"
+
+
+def test_duplicate_targets_error(tmp_path):
+    d, rv = _setup(tmp_path, _case("one"))
+    before = _by_id(d)["one"]
+    render_review(d, rv)
+    _edit(rv, "one", fix="a<-b; a<-d")
+    res = apply_review(d, rv)
+    assert res["n_errors"] == 1 and _by_id(d)["one"] == before
+
+
+def test_contradictory_ticks_error(tmp_path):
+    d, rv = _setup(tmp_path, _case("one"))
+    before = _by_id(d)["one"]
+    render_review(d, rv)
+    _edit(rv, "one", confirm=True, fix_mark=True)
+    res = apply_review(d, rv)
+    assert res["errors"] == ["one: contradictory ticks"] and _by_id(d)["one"] == before
