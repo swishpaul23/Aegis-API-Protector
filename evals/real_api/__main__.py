@@ -76,10 +76,26 @@ def _cmd_review(args: argparse.Namespace) -> int:
     return 1 if (res["errors"] or res["malformed"] or res["missing"]) else 0
 
 
-def _dump_rows(rows: list[Row], path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = [{"id": c.id, "outcome": o, "usage": u.model_dump()} for c, o, u in rows]
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+def _new_run_dir(out: Path, date: str, split: str) -> Path:
+    n = 1
+    while (out / f"{date}-{split}-{n}").exists():
+        n += 1
+    run_dir = out / f"{date}-{split}-{n}"
+    run_dir.mkdir(parents=True)
+    return run_dir
+
+
+def _dump_rows(rows: list[Row], path: Path, meta: dict, mode: str) -> None:
+    payload = {
+        "meta": meta,
+        "split": meta["split"],
+        "mode": mode,
+        "rows": [
+            {"id": c.id, "outcome": o, "usage": u.model_dump(), "label_status": c.label_status}
+            for c, o, u in rows
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
@@ -88,41 +104,64 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print("error: ANTHROPIC_API_KEY not set (needed for agent mode)", file=sys.stderr)
         return 2
     cases = [c for c in load_cases(Path(args.cases)) if split_of(c.id) == args.split]
+    if not cases:
+        print(f"error: no cases in the {args.split} split ({args.cases})", file=sys.stderr)
+        return 1
     out = Path(args.out)
     meta = _meta()
+    meta["split"] = args.split
+    run_dir = _new_run_dir(out, meta["date"], args.split)
+    meta["run"] = run_dir.name
+    meta["modes_run"] = ", ".join(modes)
     rows: dict[str, list[Row]] = {"rules": [], "agent": []}
     with tempfile.TemporaryDirectory() as tmp:
         for mode in modes:
             rows[mode] = run_all(cases, mode, Path(tmp) / mode)
-            _dump_rows(rows[mode], out / "raw" / f"{meta['date']}-{mode}.json")
-    _, md = write_report(rows["rules"], rows["agent"], out, meta)
+            _dump_rows(rows[mode], run_dir / f"raw-{mode}.json", meta, mode)
+    _, md = write_report(rows["rules"], rows["agent"], run_dir, meta)
     print(f"{len(cases)} {args.split} cases; report: {md}")
     return 0
 
 
-def _load_rows(path: Path | None, by_id: dict[str, Case]) -> list[Row]:
-    if path is None:
-        return []
+def _load_raw(path: Path, by_id: dict[str, Case]) -> tuple[dict, list[Row]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
     rows = []
-    for r in json.loads(path.read_text(encoding="utf-8")):
-        if r["id"] not in by_id:
+    for r in data["rows"]:
+        case = by_id.get(r["id"])
+        if case is None:
             raise SystemExit(f"error: raw row {r['id']!r} has no case file")
-        rows.append((by_id[r["id"]], r["outcome"], Usage(**r["usage"])))
-    return rows
+        if case.label_status != r["label_status"]:
+            print(
+                f"warning: {r['id']}: label_status was {r['label_status']} at run time, "
+                f"now {case.label_status}; using the stored one",
+                file=sys.stderr,
+            )
+            case = case.model_copy(update={"label_status": r["label_status"]})
+        rows.append((case, r["outcome"], Usage(**r["usage"])))
+    return data["meta"], rows
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
     out = Path(args.out)
+    if args.run_dir:
+        run_dir = Path(args.run_dir)
+    else:
+        runs = sorted(p for p in out.glob("*-*-*") if p.is_dir()) if out.is_dir() else []
+        if not runs:
+            print(f"error: no run directories in {out}", file=sys.stderr)
+            return 2
+        run_dir = runs[-1]
     by_id = {c.id: c for c in load_cases(Path(args.cases))}
-    latest = {}
+    rows: dict[str, list[Row]] = {m: [] for m in MODES}
+    meta: dict | None = None
     for mode in MODES:
-        files = sorted((out / "raw").glob(f"*-{mode}.json"))
-        latest[mode] = files[-1] if files else None
-    if not any(latest.values()):
-        print(f"error: no raw files in {out / 'raw'}", file=sys.stderr)
+        raw = run_dir / f"raw-{mode}.json"
+        if raw.exists():
+            meta, rows[mode] = _load_raw(raw, by_id)
+    if meta is None:
+        print(f"error: no raw-*.json in {run_dir}", file=sys.stderr)
         return 2
-    rows = {m: _load_rows(p, by_id) for m, p in latest.items()}
-    _, md = write_report(rows["rules"], rows["agent"], out, _meta())
+    _, md = write_report(rows["rules"], rows["agent"], run_dir, meta)
     print(f"report: {md}")
     return 0
 
@@ -149,6 +188,7 @@ def _build_parser() -> argparse.ArgumentParser:
     n.add_argument("--mode", choices=["rules", "agent", "both"], default="both")
     common(n, out=True)
     rp = sub.add_parser("report", help="re-render the report from the latest raw files")
+    rp.add_argument("run_dir", nargs="?", help="run directory (default: latest under --out)")
     common(rp, out=True)
     return p
 

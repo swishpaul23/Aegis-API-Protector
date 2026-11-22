@@ -55,10 +55,10 @@ From the repo root, with the dev dependencies installed:
 python -m evals.real_api mine [--api github]          # network; writes cases/, never overwrites
 python -m evals.real_api review render                # then edit REVIEW.md by hand
 python -m evals.real_api review apply
-python -m evals.real_api run --split dev --mode rules # iterate on bugs here
+python -m evals.real_api run --split dev --mode rules # iterate on bugs here (own run dir)
 export ANTHROPIC_API_KEY=...                          # agent mode only
 python -m evals.real_api run                          # headline: test split, both modes
-python -m evals.real_api report                       # re-render from latest raw files
+python -m evals.real_api report [RUN_DIR]            # re-render one run (default: latest)
 ```
 
 `mine` skips sources with no version pairs configured and skips any case id that already has
@@ -68,9 +68,14 @@ network and no key. `AEGIS_MODEL` overrides the agent model.
 
 Options: `--cases DIR` and `--out DIR` override the cases and results directories.
 
-Outputs: `results/raw/<date>-<mode>.json` (per-case outcome and usage) and
-`results/<date>.md` / `<date>.json` (report: N, per-API and per-kind breakdown, tokens, cost,
-Aegis version, model, date).
+Outputs: every `run` creates its own directory `results/<date>-<split>-<n>/` (n is the next
+free integer from 1; existing runs are never overwritten, so dev and test runs on the same day
+coexist). It holds `raw-<mode>.json` (meta, split, mode, and per-case outcome, usage and
+label_status) plus the report `<date>.md` / `<date>.json` (N, per-API and per-kind breakdown,
+tokens, cost, Aegis version, model, date, split, run). `report [RUN_DIR]` re-renders from that
+run's own raw files and stored meta only; it warns if a case's label_status changed since the
+run and uses the stored one. A mode with no raw file in the run shows as not run. A run with
+zero cases in the split exits 1 and creates nothing.
 
 **Numbers in the resume or README come from `results/*.md` only.**
 

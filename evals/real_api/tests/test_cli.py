@@ -87,27 +87,93 @@ def test_mine_does_not_overwrite_existing_case(tmp_path, monkeypatch, capsys):
     assert "two" in out and "no pairs" in out
 
 
+def _run(cases, out, split, mode="rules"):
+    return cli.main(
+        ["run", "--split", split, "--mode", mode, "--cases", str(cases), "--out", str(out)]
+    )
+
+
+def _split_seed_dir(tmp_path):
+    """Seed cases plus filler so both splits are non-empty."""
+    d = _seed_dir(tmp_path)
+    have = {split_of(c.id) for c in SEEDS}
+    for want in {"dev", "test"} - have:
+        i = 0
+        while split_of(f"fill-{i}") != want:
+            i += 1
+        save_case(SEEDS[0].model_copy(update={"id": f"fill-{i}"}), d)
+    return d
+
+
 def test_run_rules_writes_raw_and_report(tmp_path):
-    cases = _seed_dir(tmp_path)
+    cases = _split_seed_dir(tmp_path)
     out = tmp_path / "out"
-    assert cli.main(["run", "--split", "dev", "--mode", "rules", "--cases", str(cases),
-                     "--out", str(out)]) == 0
-    raws = list((out / "raw").glob("*-rules.json"))
-    assert len(raws) == 1
-    rows = json.loads(raws[0].read_text(encoding="utf-8"))
-    assert {r["id"] for r in rows} == {c.id for c in SEEDS if split_of(c.id) == "dev"}
-    assert list(out.glob("*.md")) and list(out.glob("*.json"))
+    assert _run(cases, out, "dev") == 0
+    (run_dir,) = [p for p in out.iterdir() if p.is_dir()]
+    assert run_dir.name.endswith("-dev-1")
+    raw = json.loads((run_dir / "raw-rules.json").read_text(encoding="utf-8"))
+    assert raw["split"] == "dev" and raw["mode"] == "rules"
+    assert raw["meta"]["run"] == run_dir.name
+    ids = {c.id for c in load_cases(cases) if split_of(c.id) == "dev"}
+    assert {r["id"] for r in raw["rows"]} == ids
+    assert all("label_status" in r and "usage" in r for r in raw["rows"])
+    assert list(run_dir.glob("*.md")) and list(run_dir.glob("*.json"))
 
 
-def test_report_rerenders_from_raw(tmp_path):
-    cases = _seed_dir(tmp_path)
+def test_same_day_dev_and_test_runs_do_not_overwrite(tmp_path):
+    cases = _split_seed_dir(tmp_path)
     out = tmp_path / "out"
-    cli.main(["run", "--split", "dev", "--mode", "rules", "--cases", str(cases),
-              "--out", str(out)])
-    for p in out.glob("*.md"):
+    assert _run(cases, out, "dev") == 0
+    assert _run(cases, out, "test") == 0
+    assert _run(cases, out, "test") == 0
+    dirs = sorted(p.name for p in out.iterdir() if p.is_dir())
+    assert len(dirs) == 3
+    assert dirs[0].endswith("-dev-1")
+    assert dirs[1].endswith("-test-1") and dirs[2].endswith("-test-2")
+    for d in dirs:
+        assert (out / d / "raw-rules.json").exists()
+        md = next((out / d).glob("*.md")).read_text(encoding="utf-8")
+        assert f"Split: {d.split('-')[3]}" in md
+        assert f"Run: {d}" in md
+
+
+def test_report_uses_stored_meta_not_today(tmp_path, monkeypatch):
+    cases = _split_seed_dir(tmp_path)
+    out = tmp_path / "out"
+    _run(cases, out, "dev")
+    (run_dir,) = [p for p in out.iterdir() if p.is_dir()]
+    stored = json.loads((run_dir / "raw-rules.json").read_text(encoding="utf-8"))["meta"]
+    for p in run_dir.glob("*.md"):
         p.unlink()
+    for p in run_dir.glob("[0-9]*.json"):
+        p.unlink()
+    fake = {"aegis_version": "x", "model": "y", "date": "1999-01-01"}
+    monkeypatch.setattr(cli, "_meta", lambda: fake)
+    assert cli.main(["report", str(run_dir), "--cases", str(cases), "--out", str(out)]) == 0
+    assert (run_dir / f"{stored['date']}.md").exists()
+    assert not list(out.rglob("1999-01-01*"))
+    md = (run_dir / f"{stored['date']}.md").read_text(encoding="utf-8")
+    assert "Model: y" not in md
+
+
+def test_report_defaults_to_latest_run_and_warns_on_label_change(tmp_path, capsys):
+    cases = _split_seed_dir(tmp_path)
+    out = tmp_path / "out"
+    _run(cases, out, "dev")
+    c = next(c for c in load_cases(cases) if split_of(c.id) == "dev")
+    save_case(c.model_copy(update={"label_status": "confirmed"}), cases)
+    capsys.readouterr()
     assert cli.main(["report", "--cases", str(cases), "--out", str(out)]) == 0
-    assert list(out.glob("*.md"))
+    assert f"warning: {c.id}" in capsys.readouterr().err
+
+
+def test_zero_case_run_exits_1_and_creates_nothing(tmp_path, capsys):
+    out = tmp_path / "out"
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _run(empty, out, "test") == 1
+    assert not out.exists()
+    assert "no cases" in capsys.readouterr().err
 
 
 def test_no_args_is_usage_error():

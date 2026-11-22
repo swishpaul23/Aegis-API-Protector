@@ -88,6 +88,9 @@ def _compare_table(title: str, rules: dict, agent: dict) -> list[str]:
     return lines
 
 
+_EXTRA_META = ("split", "run", "modes_run")
+
+
 def _render(data: dict[str, Any]) -> str:
     meta, rules, agent = data["meta"], data["rules"], data["agent"]
     rh, ah = rules["headline"], agent["headline"]
@@ -107,6 +110,7 @@ def _render(data: dict[str, Any]) -> str:
         f"- Aegis version: {meta['aegis_version']}",
         f"- Model: {meta['model']}",
         f"- Date: {meta['date']}",
+        *[f"- {k.replace('_', ' ').capitalize()}: {meta[k]}" for k in _EXTRA_META if k in meta],
         "",
         f"**{headline}**",
         "",
@@ -150,7 +154,9 @@ def write_report(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     data = {
-        "meta": {k: meta[k] for k in ("aegis_version", "model", "date")},
+        "meta": {
+            k: meta[k] for k in ("aegis_version", "model", "date", *_EXTRA_META) if k in meta
+        },
         "honesty_note": HONESTY_NOTE,
         "rules": _mode_block(rules_rows),
         "agent": _mode_block(agent_rows),
