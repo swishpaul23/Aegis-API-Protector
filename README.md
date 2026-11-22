@@ -54,9 +54,10 @@ detect → diff → rule matcher → (agent, only for what's left) → validate 
 
 1. **Detect**: validate records against your model and list missing, unexpected and retyped fields.
 2. **Rule matcher**: fixes only drift with exactly one sensible answer: same name in a
-   different style (`userName` → `user_name`), same name in a new place
-   (`contact.email` → `email`), or a safe type conversion. If two fields could match, it
-   doesn't guess.
+   different style (`userName` → `user_name`), same name in a new place when the field was
+   just wrapped or unwrapped (`contact.email` → `email`), or a safe type conversion. A
+   field whose parent object changed (`billing.currency` → `limits.currency`) goes to the
+   agent instead. If two fields could match, it doesn't guess.
 3. **Agent**: a LangGraph loop (propose → check → retry with the errors) on the fields the
    rules couldn't settle. It can also declare a field **unmappable** with a reason, e.g.
    a UUID string can't become an `int` without inventing data.
