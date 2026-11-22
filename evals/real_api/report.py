@@ -8,7 +8,7 @@ from typing import Any
 
 from aegis_healer.agent import Usage
 from evals.real_api.cases import Case, split_of
-from evals.real_api.scoring import OUTCOMES, Outcome, summarize
+from evals.real_api.scoring import EXCLUDED_FROM_N, OUTCOMES, Outcome, summarize
 
 HONESTY_NOTE = (
     "Schema changes are real (mined from public API spec history); record values are synthetic."
@@ -60,8 +60,8 @@ def _breakdown(title: str, key: str, rules: dict, agent: dict) -> list[str]:
         f"### {title}",
         "",
         f"| {title.split()[-1]} | N | Rules repaired | Agent repaired "
-        "| Rules wrong-applied | Agent wrong-applied |",
-        "|---|---|---|---|---|---|",
+        "| Rules wrong-applied | Agent wrong-applied | Not breaking (excluded from N) |",
+        "|---|---|---|---|---|---|---|",
     ]
     empty = {"n": 0, "counts": {o: 0 for o in OUTCOMES}}
     for name in names:
@@ -71,7 +71,8 @@ def _breakdown(title: str, key: str, rules: dict, agent: dict) -> list[str]:
             f"| {name} | {n} | {_rate(r['counts']['repaired'], r['n'])} "
             f"| {_rate(a['counts']['repaired'], a['n'])} "
             f"| {_rate(r['counts']['wrong_applied'], r['n'])} "
-            f"| {_rate(a['counts']['wrong_applied'], a['n'])} |"
+            f"| {_rate(a['counts']['wrong_applied'], a['n'])} "
+            f"| {max(r['counts']['not_breaking'], a['counts']['not_breaking'])} |"
         )
     lines.append("")
     return lines
@@ -80,6 +81,11 @@ def _breakdown(title: str, key: str, rules: dict, agent: dict) -> list[str]:
 def _compare_table(title: str, rules: dict, agent: dict) -> list[str]:
     lines = [f"### {title}", "", "| Outcome | Rules only | Rules + agent |", "|---|---|---|"]
     for o in OUTCOMES:
+        if o in EXCLUDED_FROM_N:
+            lines.append(
+                f"| {o} (excluded from N) | {rules['counts'][o]} | {agent['counts'][o]} |"
+            )
+            continue
         lines.append(
             f"| {o} | {_rate(rules['counts'][o], rules['n'])} "
             f"| {_rate(agent['counts'][o], agent['n'])} |"

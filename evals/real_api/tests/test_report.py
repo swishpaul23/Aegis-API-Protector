@@ -97,3 +97,24 @@ def test_usage_sections_are_labelled_by_scope(tmp_path):
     data = json.loads(jp.read_text())
     assert data["agent"]["headline_usage"]["input_tokens"] == 1000
     assert data["agent"]["usage"]["input_tokens"] == 2000
+
+
+def test_not_breaking_shown_in_every_table_and_excluded_from_n(tmp_path):
+    t1, t2, t3 = _ids("test", 3)
+    (d1,) = _ids("dev", 1)
+    rows = [
+        (_case(t1), "repaired", Usage()),
+        (_case(t2), "not_breaking", Usage()),
+        (_case(t3), "safe_deferral", Usage()),
+        (_case(d1), "not_breaking", Usage()),
+    ]
+    jp, mp = write_report(rows, rows, tmp_path, META)
+    data = json.loads(jp.read_text())
+    assert data["rules"]["headline"]["n"] == 2
+    assert data["rules"]["headline"]["counts"]["not_breaking"] == 1
+    md = mp.read_text()
+    assert "50.0% (1/2)" in md
+    tables = [b for b in md.split("### ")[1:] if "|---" in b]
+    assert len(tables) >= 4
+    for t in tables:
+        assert "not_breaking" in t or "Not breaking" in t, t

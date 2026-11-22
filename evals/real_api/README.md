@@ -21,8 +21,10 @@ Each case is scored into one outcome:
 | correct_refusal | Expected a refusal; nothing was applied. |
 | safe_deferral | Expected a repair but nothing was applied (left pending/failed for a human). Not an error. |
 | crashed | An exception. Counted as a failure and listed. |
+| not_breaking | Expected a repair, but Healer returned `ok` (no drift detected) with the expected values: the change did not break the model, so Aegis did nothing. **Excluded from N** and reported separately in every table. `ok` with wrong values, or `ok` on a refuse case, is wrong_applied. |
 
-Headline = repaired / N, reported beside the wrongly-applied count and rate. Rules-only and
+Headline = repaired / N, where N = confirmed test cases whose outcome is not not_breaking,
+reported beside the wrongly-applied count and rate. Rules-only and
 rules+agent are reported side by side so the agent's lift is visible.
 
 ## Dev/test rule
@@ -86,4 +88,8 @@ zero cases in the split exits 1 and creates nothing.
 - The rules matcher handles style renames and same-leaf moves only; the agent handles the rest.
 - Record values are synthetic, so value-format edge cases from real traffic are not covered.
 - Meaning drift is out of scope (`meaning=False`).
+- Eval models are lax Pydantic models, like real users' models: a retype that Pydantic
+  coerces (`"1234"` -> int, `1234.0` -> int, int epoch -> datetime) is not breaking for such a
+  user, so it scores not_breaking and leaves N. The models are deliberately not made strict;
+  a strict-model user would see those cases break.
 - N is whatever is reachable and confirmed; it is not padded.

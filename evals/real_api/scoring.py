@@ -10,7 +10,9 @@ from pydantic import BaseModel
 from aegis_healer import HealResult
 from evals.real_api.cases import Case
 
-Outcome = Literal["repaired", "wrong_applied", "correct_refusal", "safe_deferral", "crashed"]
+Outcome = Literal[
+    "repaired", "wrong_applied", "correct_refusal", "safe_deferral", "crashed", "not_breaking"
+]
 
 OUTCOMES: tuple[Outcome, ...] = (
     "repaired",
@@ -18,17 +20,27 @@ OUTCOMES: tuple[Outcome, ...] = (
     "correct_refusal",
     "safe_deferral",
     "crashed",
+    "not_breaking",
 )
+# Outcomes that are not part of the denominator N: the change did not break the model.
+EXCLUDED_FROM_N: frozenset[str] = frozenset({"not_breaking"})
 
 
 def classify(case: Case, result: HealResult | None, expected_records: list[BaseModel]) -> Outcome:
     """Score one run. `result is None` means the run raised.
 
-    `ok` is treated like `healed` (records loaded without review) and scored by value.
+    `ok` means no drift was detected (lax Pydantic coercion absorbed the change). On a repair
+    case with correct values that is `not_breaking`: Aegis did nothing, so it is excluded from
+    N rather than credited as a repair. `ok` with wrong values, or on a refuse case, is
+    `wrong_applied`.
     """
     if result is None:
         return "crashed"
-    if result.status in ("ok", "healed"):
+    if result.status == "ok":
+        if case.expected == "repair" and result.records == expected_records:
+            return "not_breaking"
+        return "wrong_applied"
+    if result.status == "healed":
         if case.expected == "repair" and result.records == expected_records:
             return "repaired"
         return "wrong_applied"
@@ -37,7 +49,7 @@ def classify(case: Case, result: HealResult | None, expected_records: list[BaseM
 
 
 def _block(outcomes: list[Outcome]) -> dict[str, Any]:
-    n = len(outcomes)
+    n = sum(1 for o in outcomes if o not in EXCLUDED_FROM_N)
     c = Counter(outcomes)
     counts = {o: c.get(o, 0) for o in OUTCOMES}
     return {

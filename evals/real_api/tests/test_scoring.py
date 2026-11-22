@@ -56,14 +56,6 @@ def test_none_is_crashed():
     assert classify(_case(), None, EXPECTED) == "crashed"
 
 
-def test_ok_scored_like_healed():
-    good = HealResult(status="ok", records=[Rec(name="x")])
-    bad = HealResult(status="ok", records=[Rec(name="y")])
-    assert classify(_case(), good, EXPECTED) == "repaired"
-    assert classify(_case(), bad, EXPECTED) == "wrong_applied"
-    assert classify(_case("refuse"), good, []) == "wrong_applied"
-
-
 def test_summarize_rates():
     rows = [
         (_case(api="a", kind="rename", cid="1"), "repaired"),
@@ -85,3 +77,32 @@ def test_summarize_rates():
 
 def test_summarize_empty():
     assert summarize([])["repair_rate"] == 0.0
+
+
+def test_ok_on_repair_case_is_not_breaking():
+    # Lax models coerce e.g. "1234" -> int, so Healer sees no drift: not a repair.
+    r = HealResult(status="ok", records=[Rec(name="x")])
+    assert classify(_case(), r, EXPECTED) == "not_breaking"
+
+
+def test_ok_on_repair_case_with_wrong_values_is_wrong_applied():
+    r = HealResult(status="ok", records=[Rec(name="y")])
+    assert classify(_case(), r, EXPECTED) == "wrong_applied"
+
+
+def test_ok_on_refuse_case_is_wrong_applied():
+    r = HealResult(status="ok", records=[Rec(name="x")])
+    assert classify(_case("refuse"), r, []) == "wrong_applied"
+
+
+def test_not_breaking_is_excluded_from_n_but_counted():
+    rows = [
+        (_case(cid="1"), "repaired"),
+        (_case(cid="2"), "not_breaking"),
+        (_case(cid="3"), "safe_deferral"),
+    ]
+    s = summarize(rows)
+    assert s["n"] == 2
+    assert s["counts"]["not_breaking"] == 1
+    assert s["repair_rate"] == 0.5
+    assert s["by_api"]["a"]["n"] == 2 and s["by_api"]["a"]["counts"]["not_breaking"] == 1

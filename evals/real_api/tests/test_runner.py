@@ -46,3 +46,20 @@ def test_runner_is_deterministic(tmp_path):
     a = runner.run_all(SEEDS, "rules", tmp_path / "a")
     b = runner.run_all(SEEDS, "rules", tmp_path / "b")
     assert [o for _, o, _ in a] == [o for _, o, _ in b]
+
+
+def test_coerced_retype_is_not_breaking(tmp_path):
+    from evals.real_api.cases import Case, ExpectedMap
+
+    case = Case(
+        id="retype-coerced",
+        api="seed",
+        source={},
+        kind="retype",
+        old_fields={"id": "integer", "name": "string"},
+        new_fields={"id": "string", "name": "string"},
+        expected="repair",
+        maps=[ExpectedMap(target="id", source="id", convert="int_str")],
+    )
+    outcome, _ = runner.run_case(case, None, tmp_path)
+    assert outcome == "not_breaking"
