@@ -1,0 +1,29 @@
+{
+  "ambiguous": false,
+  "api": "twilio",
+  "expected": "refuse",
+  "id": "twilio-trusthub.v1.compliance_tollfree_inquiry-efe598fa",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "inquiry_id": "string",
+    "inquiry_session_token": "string",
+    "registration_id": "string",
+    "url": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "inquiry_id": "string",
+    "inquiry_session_token": "string",
+    "tollfree_id": "string",
+    "url": "string"
+  },
+  "source": {
+    "new_ref": "98f43ca21c42",
+    "old_ref": "6c89cd16fb6f",
+    "repo": "https://github.com/twilio/twilio-oai",
+    "schema": "trusthub.v1.compliance_tollfree_inquiry",
+    "spec_path": "spec/json/twilio_trusthub_v1.json"
+  }
+}

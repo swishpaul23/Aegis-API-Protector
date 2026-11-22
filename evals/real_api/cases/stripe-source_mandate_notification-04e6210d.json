@@ -1,0 +1,50 @@
+{
+  "ambiguous": true,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-source_mandate_notification-04e6210d",
+  "kind": "move",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "amount": "integer",
+    "bacs_debit.last4": "string",
+    "created": "integer",
+    "id": "string",
+    "livemode": "boolean",
+    "object": "string",
+    "reason": "string",
+    "sepa_debit.creditor_identifier": "string",
+    "sepa_debit.last4": "string",
+    "sepa_debit.mandate_reference": "string",
+    "source.amount": "integer",
+    "source.client_secret": "string",
+    "source.customer": "string"
+  },
+  "notes": "candidates: source.ach_debit.last4->{bacs_debit.last4:1.00,sepa_debit.last4:1.00}; source.bancontact.iban_last4->{bacs_debit.last4:0.67,sepa_debit.last4:0.67}; source.card.last4->{bacs_debit.last4:1.00,sepa_debit.last4:1.00}; source.card_present.last4->{bacs_debit.last4:1.00,sepa_debit.last4:1.00}; source.ideal.iban_last4->{bacs_debit.last4:0.67,sepa_debit.last4:0.67}; source.sepa_debit.last4->{bacs_debit.last4:1.00,sepa_debit.last4:1.00}; source.sofort.iban_last4->{bacs_debit.last4:0.67,sepa_debit.last4:0.67}; source.three_d_secure.last4->{bacs_debit.last4:1.00,sepa_debit.last4:1.00}",
+  "old_fields": {
+    "amount": "integer",
+    "created": "integer",
+    "id": "string",
+    "livemode": "boolean",
+    "object": "string",
+    "reason": "string",
+    "source.ach_debit.last4": "string",
+    "source.amount": "integer",
+    "source.bancontact.iban_last4": "string",
+    "source.card.last4": "string",
+    "source.card_present.last4": "string",
+    "source.client_secret": "string",
+    "source.ideal.iban_last4": "string",
+    "source.sepa_debit.last4": "string",
+    "source.sofort.iban_last4": "string",
+    "source.three_d_secure.last4": "string"
+  },
+  "source": {
+    "new_ref": "07222e925811",
+    "old_ref": "3d3b4d502c30",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "source_mandate_notification",
+    "spec_path": "openapi/spec3.json"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "ambiguous": false,
+  "api": "box",
+  "expected": "refuse",
+  "id": "box-IntegrationMappings-fffdb6f4",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "limit": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "limit": "integer",
+    "prev_marker": "integer"
+  },
+  "source": {
+    "new_ref": "563b6f79bc87",
+    "old_ref": "9309c62d307e",
+    "repo": "https://github.com/box/box-openapi",
+    "schema": "IntegrationMappings",
+    "spec_path": "openapi.json"
+  }
+}

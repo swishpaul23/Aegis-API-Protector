@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-charge-4221d0e5",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "amount": "integer",
+    "amount_refunded": "integer",
+    "application_fee_amount": "integer",
+    "billing_details.email": "string",
+    "billing_details.name": "string",
+    "billing_details.phone": "string",
+    "calculated_statement_descriptor": "string",
+    "captured": "boolean",
+    "created": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "amount": "integer",
+    "amount_refunded": "integer",
+    "application_fee_amount": "integer",
+    "billing_details.email": "string",
+    "billing_details.name": "string",
+    "billing_details.phone": "string",
+    "captured": "boolean",
+    "created": "integer",
+    "payment_intent": "string"
+  },
+  "source": {
+    "new_ref": "34ddc7feabef",
+    "old_ref": "a63555d40ae5",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "charge",
+    "spec_path": "openapi/spec3.json"
+  }
+}

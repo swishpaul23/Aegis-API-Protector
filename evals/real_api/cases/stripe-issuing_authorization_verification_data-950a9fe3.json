@@ -1,0 +1,35 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-issuing_authorization_verification_data-950a9fe3",
+  "kind": "rename",
+  "label_status": "drafted",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "address_postal_code_check",
+      "target": "address_zip_check"
+    }
+  ],
+  "new_fields": {
+    "address_line1_check": "string",
+    "address_postal_code_check": "string",
+    "cvc_check": "string",
+    "expiry_check": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "address_line1_check": "string",
+    "address_zip_check": "string",
+    "cvc_check": "string",
+    "expiry_check": "string"
+  },
+  "source": {
+    "new_ref": "34ddc7feabef",
+    "old_ref": "a63555d40ae5",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "issuing_authorization_verification_data",
+    "spec_path": "openapi/spec3.json"
+  }
+}

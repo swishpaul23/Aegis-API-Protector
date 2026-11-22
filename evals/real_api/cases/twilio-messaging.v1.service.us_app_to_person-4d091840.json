@@ -1,0 +1,40 @@
+{
+  "ambiguous": false,
+  "api": "twilio",
+  "expected": "refuse",
+  "id": "twilio-messaging.v1.service.us_app_to_person-4d091840",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "account_sid": "string",
+    "brand_registration_sid": "string",
+    "campaign_id": "string",
+    "campaign_status": "string",
+    "date_created": "datetime",
+    "date_updated": "datetime",
+    "description": "string",
+    "has_embedded_links": "boolean",
+    "has_embedded_phone": "boolean",
+    "sid": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "account_sid": "string",
+    "brand_registration_sid": "string",
+    "campaign_id": "string",
+    "date_created": "datetime",
+    "date_updated": "datetime",
+    "description": "string",
+    "has_embedded_links": "boolean",
+    "has_embedded_phone": "boolean",
+    "status": "string"
+  },
+  "source": {
+    "new_ref": "74b89fff16e2",
+    "old_ref": "5914f6ccca83",
+    "repo": "https://github.com/twilio/twilio-oai",
+    "schema": "messaging.v1.service.us_app_to_person",
+    "spec_path": "spec/json/twilio_messaging_v1.json"
+  }
+}

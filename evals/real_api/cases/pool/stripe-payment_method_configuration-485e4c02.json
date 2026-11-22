@@ -1,0 +1,43 @@
+{
+  "ambiguous": true,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-payment_method_configuration-485e4c02",
+  "kind": "move",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "acss_debit.available": "boolean",
+    "active": "boolean",
+    "affirm.available": "boolean",
+    "afterpay_clearpay.available": "boolean",
+    "alipay.available": "boolean",
+    "apple_pay.available": "boolean",
+    "application": "string",
+    "au_becs_debit.available": "boolean",
+    "revolut_pay.available": "boolean"
+  },
+  "notes": "candidates: id_bank_transfer.available->{revolut_pay.available:1.00}; multibanco.available->{revolut_pay.available:1.00}; netbanking.available->{revolut_pay.available:1.00}; pay_by_bank.available->{revolut_pay.available:1.00}; upi.available->{revolut_pay.available:1.00}",
+  "old_fields": {
+    "acss_debit.available": "boolean",
+    "active": "boolean",
+    "affirm.available": "boolean",
+    "afterpay_clearpay.available": "boolean",
+    "alipay.available": "boolean",
+    "apple_pay.available": "boolean",
+    "application": "string",
+    "au_becs_debit.available": "boolean",
+    "id_bank_transfer.available": "boolean",
+    "multibanco.available": "boolean",
+    "netbanking.available": "boolean",
+    "pay_by_bank.available": "boolean",
+    "upi.available": "boolean"
+  },
+  "source": {
+    "new_ref": "977d15ddf653",
+    "old_ref": "d533a5490bc6",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "payment_method_configuration",
+    "spec_path": "openapi/spec3.json"
+  }
+}

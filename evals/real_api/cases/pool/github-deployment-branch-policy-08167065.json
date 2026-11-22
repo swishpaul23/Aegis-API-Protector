@@ -1,0 +1,25 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-deployment-branch-policy-08167065",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "id": "integer",
+    "name": "string",
+    "node_id": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "protected_branches": "boolean"
+  },
+  "source": {
+    "new_ref": "19e01c490eb6",
+    "old_ref": "98a1dec6a9da",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "deployment-branch-policy",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

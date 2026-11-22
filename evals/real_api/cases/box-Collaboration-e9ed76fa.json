@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "box",
+  "expected": "refuse",
+  "id": "box-Collaboration-e9ed76fa",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "acceptance_requirements_status.strong_password_requirement.enterprise_has_strong_password_required_for_external_users": "boolean",
+    "acceptance_requirements_status.strong_password_requirement.user_has_strong_password": "boolean",
+    "acceptance_requirements_status.terms_of_service_requirement.is_accepted": "boolean",
+    "acceptance_requirements_status.terms_of_service_requirement.terms_of_service.id": "string",
+    "acceptance_requirements_status.terms_of_service_requirement.terms_of_service.type": "string",
+    "acceptance_requirements_status.two_factor_authentication_requirement.enterprise_has_two_factor_auth_enabled": "boolean",
+    "acceptance_requirements_status.two_factor_authentication_requirement.user_has_two_factor_authentication_enabled": "boolean",
+    "acknowledged_at": "datetime",
+    "is_access_only": "boolean"
+  },
+  "notes": "",
+  "old_fields": {
+    "acceptance_requirements_status.strong_password_requirement.enterprise_has_strong_password_required_for_external_users": "boolean",
+    "acceptance_requirements_status.strong_password_requirement.user_has_strong_password": "boolean",
+    "acceptance_requirements_status.terms_of_service_requirement.is_accepted": "boolean",
+    "acceptance_requirements_status.terms_of_service_requirement.terms_of_service.id": "string",
+    "acceptance_requirements_status.terms_of_service_requirement.terms_of_service.type": "string",
+    "acceptance_requirements_status.two_factor_authentication_requirement.enterprise_has_two_factor_auth_enabled": "boolean",
+    "acceptance_requirements_status.two_factor_authentication_requirement.user_has_two_factor_authentication_enabled": "boolean",
+    "accessible_by.name": "string",
+    "acknowledged_at": "datetime"
+  },
+  "source": {
+    "new_ref": "563b6f79bc87",
+    "old_ref": "9309c62d307e",
+    "repo": "https://github.com/box/box-openapi",
+    "schema": "Collaboration",
+    "spec_path": "openapi.json"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-account_settings-b93bc993",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "bacs_debit_payments.display_name": "string",
+    "bacs_debit_payments.service_user_number": "string",
+    "branding.primary_color": "string",
+    "branding.secondary_color": "string",
+    "card_payments.statement_descriptor_prefix": "string",
+    "card_payments.statement_descriptor_prefix_kana": "string",
+    "card_payments.statement_descriptor_prefix_kanji": "string",
+    "dashboard.display_name": "string",
+    "invoices.hosted_payment_method_save": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "bacs_debit_payments.display_name": "string",
+    "bacs_debit_payments.service_user_number": "string",
+    "branding.primary_color": "string",
+    "branding.secondary_color": "string",
+    "card_payments.statement_descriptor_prefix": "string",
+    "card_payments.statement_descriptor_prefix_kana": "string",
+    "card_payments.statement_descriptor_prefix_kanji": "string",
+    "dashboard.display_name": "string",
+    "payments.statement_descriptor_prefix_kanji": "string"
+  },
+  "source": {
+    "new_ref": "053c4b35b25f",
+    "old_ref": "7ad98dc0f5a6",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "account_settings",
+    "spec_path": "openapi/spec3.json"
+  }
+}

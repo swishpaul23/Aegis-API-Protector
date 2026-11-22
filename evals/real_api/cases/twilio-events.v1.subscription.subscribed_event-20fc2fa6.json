@@ -1,0 +1,37 @@
+{
+  "ambiguous": false,
+  "api": "twilio",
+  "expected": "repair",
+  "id": "twilio-events.v1.subscription.subscribed_event-20fc2fa6",
+  "kind": "rename",
+  "label_status": "drafted",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "schema_version",
+      "target": "version"
+    }
+  ],
+  "new_fields": {
+    "account_sid": "string",
+    "schema_version": "integer",
+    "subscription_sid": "string",
+    "type": "string",
+    "url": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "account_sid": "string",
+    "subscription_sid": "string",
+    "type": "string",
+    "url": "string",
+    "version": "integer"
+  },
+  "source": {
+    "new_ref": "1ca3b2ef3026",
+    "old_ref": "f506dfc52e5d",
+    "repo": "https://github.com/twilio/twilio-oai",
+    "schema": "events.v1.subscription.subscribed_event",
+    "spec_path": "spec/json/twilio_events_v1.json"
+  }
+}

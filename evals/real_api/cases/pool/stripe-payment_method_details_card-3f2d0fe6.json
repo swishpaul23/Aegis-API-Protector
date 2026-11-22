@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-payment_method_details_card-3f2d0fe6",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "amount_authorized": "integer",
+    "authorization_code": "string",
+    "brand": "string",
+    "capture_before": "integer",
+    "country": "string",
+    "electronic_commerce_indicator": "string",
+    "exp_month": "integer",
+    "exp_year": "integer",
+    "extended_authorization.status": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "amount_authorized": "integer",
+    "authorization_code": "string",
+    "brand": "string",
+    "capture_before": "integer",
+    "country": "string",
+    "exp_month": "integer",
+    "exp_year": "integer",
+    "extended_authorization.status": "string",
+    "mandate": "string"
+  },
+  "source": {
+    "new_ref": "bcfd59f49dca",
+    "old_ref": "f4ac6d9a7f40",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "payment_method_details_card",
+    "spec_path": "openapi/spec3.json"
+  }
+}

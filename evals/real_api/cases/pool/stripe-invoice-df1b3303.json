@@ -1,0 +1,47 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-invoice-df1b3303",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "account_country": "string",
+    "account_name": "string",
+    "amount_due": "integer",
+    "amount_paid": "integer",
+    "amount_remaining": "integer",
+    "application_fee_amount": "integer",
+    "attempt_count": "integer",
+    "attempted": "boolean",
+    "auto_advance": "boolean",
+    "billing": "string",
+    "collection_method": "string",
+    "customer_email": "string",
+    "customer_name": "string",
+    "customer_phone": "string",
+    "customer_tax_exempt": "string",
+    "post_payment_credit_notes_amount": "integer",
+    "pre_payment_credit_notes_amount": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "amount_due": "integer",
+    "amount_paid": "integer",
+    "amount_remaining": "integer",
+    "application_fee_amount": "integer",
+    "attempt_count": "integer",
+    "attempted": "boolean",
+    "auto_advance": "boolean",
+    "billing": "string",
+    "date": "integer"
+  },
+  "source": {
+    "new_ref": "c806fa1f987e",
+    "old_ref": "07222e925811",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "invoice",
+    "spec_path": "openapi/spec3.json"
+  }
+}

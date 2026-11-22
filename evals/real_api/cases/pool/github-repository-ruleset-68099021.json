@@ -1,0 +1,40 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-repository-ruleset-68099021",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "_links.html.href": "string",
+    "_links.self.href": "string",
+    "created_at": "datetime",
+    "current_user_can_bypass": "string",
+    "enforcement": "string",
+    "id": "integer",
+    "name": "string",
+    "node_id": "string",
+    "source": "string",
+    "source_type": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "_links.self.href": "string",
+    "bypass_mode": "string",
+    "created_at": "datetime",
+    "enforcement": "string",
+    "id": "integer",
+    "name": "string",
+    "node_id": "string",
+    "source": "string",
+    "source_type": "string"
+  },
+  "source": {
+    "new_ref": "6fbc3eb806ad",
+    "old_ref": "a696ff15ec55",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "repository-ruleset",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "ambiguous": false,
+  "api": "twilio",
+  "expected": "refuse",
+  "id": "twilio-oauth.v1.token-0dc25a8f",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "access_token": "string",
+    "expires_in": "integer",
+    "id_token": "string",
+    "refresh_token": "string",
+    "token_type": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "access_token": "string",
+    "id_token": "string",
+    "refresh_token": "string",
+    "refresh_token_expires_at": "datetime"
+  },
+  "source": {
+    "new_ref": "cc2f698cce53",
+    "old_ref": "6c89cd16fb6f",
+    "repo": "https://github.com/twilio/twilio-oai",
+    "schema": "oauth.v1.token",
+    "spec_path": "spec/json/twilio_oauth_v1.json"
+  }
+}

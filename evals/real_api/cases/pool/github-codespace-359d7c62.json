@@ -1,0 +1,41 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-codespace-359d7c62",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "billable_owner.avatar_url": "string",
+    "billable_owner.email": "string",
+    "billable_owner.events_url": "string",
+    "billable_owner.followers_url": "string",
+    "billable_owner.following_url": "string",
+    "billable_owner.gists_url": "string",
+    "billable_owner.gravatar_id": "string",
+    "billable_owner.html_url": "string",
+    "idle_timeout_minutes": "integer",
+    "machine.prebuild_availability": "string",
+    "prebuild": "boolean"
+  },
+  "notes": "",
+  "old_fields": {
+    "auto_stop_delay_minutes": "integer",
+    "billable_owner.avatar_url": "string",
+    "billable_owner.email": "string",
+    "billable_owner.events_url": "string",
+    "billable_owner.followers_url": "string",
+    "billable_owner.following_url": "string",
+    "billable_owner.gists_url": "string",
+    "billable_owner.gravatar_id": "string",
+    "billable_owner.html_url": "string"
+  },
+  "source": {
+    "new_ref": "d265e263f143",
+    "old_ref": "c177fb08c8ab",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "codespace",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

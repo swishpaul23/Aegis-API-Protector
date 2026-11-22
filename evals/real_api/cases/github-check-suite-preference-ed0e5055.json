@@ -1,0 +1,44 @@
+{
+  "ambiguous": true,
+  "api": "github",
+  "expected": "repair",
+  "id": "github-check-suite-preference-ed0e5055",
+  "kind": "move",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "repository.archive_url": "string",
+    "repository.archived": "boolean",
+    "repository.assignees_url": "string",
+    "repository.blobs_url": "string",
+    "repository.branches_url": "string",
+    "repository.clone_url": "string",
+    "repository.collaborators_url": "string",
+    "repository.comments_url": "string",
+    "repository.license.key": "string",
+    "repository.license.name": "string",
+    "repository.license.node_id": "string",
+    "repository.license.spdx_id": "string",
+    "repository.license.url": "string"
+  },
+  "notes": "candidates: repository.template_repository.node_id->{repository.license.node_id:1.00}; repository.template_repository.owner.node_id->{repository.license.node_id:1.00}",
+  "old_fields": {
+    "repository.archive_url": "string",
+    "repository.archived": "boolean",
+    "repository.assignees_url": "string",
+    "repository.blobs_url": "string",
+    "repository.branches_url": "string",
+    "repository.clone_url": "string",
+    "repository.collaborators_url": "string",
+    "repository.comments_url": "string",
+    "repository.template_repository.node_id": "string",
+    "repository.template_repository.owner.node_id": "string"
+  },
+  "source": {
+    "new_ref": "b60d51b633c1",
+    "old_ref": "5a5a1deffbc6",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "check-suite-preference",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

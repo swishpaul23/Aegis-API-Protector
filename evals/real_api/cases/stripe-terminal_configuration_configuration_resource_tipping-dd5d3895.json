@@ -1,0 +1,45 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-terminal_configuration_configuration_resource_tipping-dd5d3895",
+  "kind": "move",
+  "label_status": "drafted",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "gip.smart_tip_threshold",
+      "target": "bgn.smart_tip_threshold"
+    }
+  ],
+  "new_fields": {
+    "aed.smart_tip_threshold": "integer",
+    "aud.smart_tip_threshold": "integer",
+    "cad.smart_tip_threshold": "integer",
+    "chf.smart_tip_threshold": "integer",
+    "czk.smart_tip_threshold": "integer",
+    "dkk.smart_tip_threshold": "integer",
+    "eur.smart_tip_threshold": "integer",
+    "gbp.smart_tip_threshold": "integer",
+    "gip.smart_tip_threshold": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "aed.smart_tip_threshold": "integer",
+    "aud.smart_tip_threshold": "integer",
+    "bgn.smart_tip_threshold": "integer",
+    "cad.smart_tip_threshold": "integer",
+    "chf.smart_tip_threshold": "integer",
+    "czk.smart_tip_threshold": "integer",
+    "dkk.smart_tip_threshold": "integer",
+    "eur.smart_tip_threshold": "integer",
+    "gbp.smart_tip_threshold": "integer"
+  },
+  "source": {
+    "new_ref": "f4ac6d9a7f40",
+    "old_ref": "053c4b35b25f",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "terminal_configuration_configuration_resource_tipping",
+    "spec_path": "openapi/spec3.json"
+  }
+}

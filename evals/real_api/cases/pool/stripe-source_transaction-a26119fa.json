@@ -1,0 +1,50 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "refuse",
+  "id": "stripe-source_transaction-a26119fa",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "ach_credit_transfer.customer_data": "string",
+    "ach_credit_transfer.fingerprint": "string",
+    "ach_credit_transfer.last4": "string",
+    "ach_credit_transfer.routing_number": "string",
+    "amount": "integer",
+    "chf_credit_transfer.reference": "string",
+    "chf_credit_transfer.sender_address_country": "string",
+    "chf_credit_transfer.sender_address_line1": "string",
+    "chf_credit_transfer.sender_iban": "string",
+    "chf_credit_transfer.sender_name": "string",
+    "created": "integer",
+    "currency": "string",
+    "id": "string",
+    "livemode": "boolean",
+    "object": "string",
+    "paper_check.available_at": "string",
+    "paper_check.invoices": "string",
+    "sepa_credit_transfer.reference": "string",
+    "sepa_credit_transfer.sender_iban": "string",
+    "sepa_credit_transfer.sender_name": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "ach_credit_transfer.fingerprint": "string",
+    "ach_credit_transfer.routing_number": "string",
+    "amount": "integer",
+    "card_present.application_preferred_name": "string",
+    "created": "integer",
+    "currency": "string",
+    "id": "string",
+    "livemode": "boolean",
+    "object": "string"
+  },
+  "source": {
+    "new_ref": "07222e925811",
+    "old_ref": "3d3b4d502c30",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "source_transaction",
+    "spec_path": "openapi/spec3.json"
+  }
+}

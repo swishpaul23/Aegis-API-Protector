@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-webhook-discussion-unanswered-651627ae",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "action": "string",
+    "discussion.active_lock_reason": "string",
+    "discussion.answer_chosen_at": "string",
+    "discussion.answer_chosen_by.avatar_url": "string",
+    "discussion.answer_chosen_by.deleted": "boolean",
+    "discussion.answer_chosen_by.email": "string",
+    "discussion.answer_chosen_by.events_url": "string",
+    "discussion.answer_chosen_by.followers_url": "string",
+    "discussion.state_reason": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "action": "string",
+    "discussion.active_lock_reason": "string",
+    "discussion.answer_chosen_at": "string",
+    "discussion.answer_chosen_by.avatar_url": "string",
+    "discussion.answer_chosen_by.deleted": "boolean",
+    "discussion.answer_chosen_by.email": "string",
+    "discussion.answer_chosen_by.events_url": "string",
+    "discussion.answer_chosen_by.followers_url": "string",
+    "enterprise.node_id": "string"
+  },
+  "source": {
+    "new_ref": "3bb64cfb4aae",
+    "old_ref": "cd2a87452008",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "webhook-discussion-unanswered",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

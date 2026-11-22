@@ -1,0 +1,39 @@
+{
+  "ambiguous": false,
+  "api": "github",
+  "expected": "refuse",
+  "id": "github-private-user-e03b69e8",
+  "kind": "unmappable",
+  "label_status": "drafted",
+  "maps": [],
+  "new_fields": {
+    "avatar_url": "string",
+    "bio": "string",
+    "blog": "string",
+    "business_plus": "boolean",
+    "collaborators": "integer",
+    "company": "string",
+    "created_at": "datetime",
+    "disk_usage": "integer",
+    "user_view_type": "string"
+  },
+  "notes": "",
+  "old_fields": {
+    "avatar_url": "string",
+    "bio": "string",
+    "blog": "string",
+    "business_plus": "boolean",
+    "collaborators": "integer",
+    "company": "string",
+    "created_at": "datetime",
+    "disk_usage": "integer",
+    "suspended_at": "datetime"
+  },
+  "source": {
+    "new_ref": "0a1f68fde44a",
+    "old_ref": "1020cb003cf3",
+    "repo": "https://github.com/github/rest-api-description",
+    "schema": "private-user",
+    "spec_path": "descriptions/api.github.com/api.github.com.json"
+  }
+}

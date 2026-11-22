@@ -1,0 +1,45 @@
+{
+  "ambiguous": false,
+  "api": "stripe",
+  "expected": "repair",
+  "id": "stripe-subscription_schedule-6eb60558",
+  "kind": "rename",
+  "label_status": "drafted",
+  "maps": [
+    {
+      "convert": "none",
+      "source": "end_behavior",
+      "target": "renewal_behavior"
+    }
+  ],
+  "new_fields": {
+    "canceled_at": "integer",
+    "collection_method": "string",
+    "completed_at": "integer",
+    "created": "integer",
+    "end_behavior": "string",
+    "id": "string",
+    "livemode": "boolean",
+    "object": "string",
+    "released_at": "integer"
+  },
+  "notes": "",
+  "old_fields": {
+    "canceled_at": "integer",
+    "collection_method": "string",
+    "completed_at": "integer",
+    "created": "integer",
+    "id": "string",
+    "livemode": "boolean",
+    "object": "string",
+    "released_at": "integer",
+    "renewal_behavior": "string"
+  },
+  "source": {
+    "new_ref": "61454d918c9e",
+    "old_ref": "c806fa1f987e",
+    "repo": "https://github.com/stripe/openapi",
+    "schema": "subscription_schedule",
+    "spec_path": "openapi/spec3.json"
+  }
+}
