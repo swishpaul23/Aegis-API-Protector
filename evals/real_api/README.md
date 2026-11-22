@@ -106,20 +106,22 @@ work if agent mode is requested without `ANTHROPIC_API_KEY`, or if the live pref
 tiny call to the eval's model, `AEGIS_MODEL` or the default) fails; no run directory is
 created then. If more than 3 cases end in agent_error, the agent pass aborts with exit code 2:
 no agent rows and no report are written (rules rows already written stay, and the directory
-still counts as a run). Running the rules mode needs no
-network and no key. `AEGIS_MODEL` overrides the agent model.
+still counts as a run). Running the rules mode needs no network and no key. `AEGIS_MODEL`
+overrides the agent model.
 
 Options: `--cases DIR` and `--out DIR` override the cases and results directories.
 
 Outputs: every `run` creates its own directory `results/<date>-<split>-<n>/` (n is the next
 free integer from 1; existing runs are never overwritten, so dev and test runs on the same day
-coexist). It holds `raw-<mode>.json` (meta, split, mode, and per-case outcome, usage and
-label_status) plus the report `<date>.md` / `<date>.json` (N, per-API and per-kind breakdown,
-tokens, cost, Aegis version, model, date, split, run). `report [RUN_DIR]` re-renders from that
+coexist). It holds `raw-<mode>.json` (meta, split, mode, and per-case outcome, usage,
+label_status and error reason) plus the report `<date>.md` / `<date>.json` (N, per-API and per-kind breakdown,
+tokens, cost, Aegis version, model, date, split, run, modes run, prior test runs, and the
+wrongly applied / crashed / agent_error case ids with reasons). `report [RUN_DIR]` re-renders from that
 run's own raw files and stored meta only; it warns if a case's label_status changed since the
-run and uses the stored one. A mode with no raw file in the run shows as not run (`report` derives the modes from the raw
-files present, so an aborted agent pass re-renders as rules only). A run with
-zero cases to run (for test: zero confirmed test cases) exits 1 and creates nothing.
+run and uses the stored one. A mode with no raw file in the run shows as not run (`report`
+derives the modes from the raw files present, so an aborted agent pass re-renders as rules
+only). A run with zero cases to run (for test: zero confirmed test cases) exits 1 and creates
+nothing.
 
 **Numbers in the resume or README come from `results/*.md` only.**
 
@@ -128,6 +130,10 @@ zero cases to run (for test: zero confirmed test cases) exits 1 and creates noth
 - Schema flattening follows one `$ref` hop; a referenced schema's own `$ref`s are not followed.
 - At most 2000 paths per schema; expansion stops beyond that.
 - The rules matcher handles style renames and same-leaf moves only; the agent handles the rest.
+  The miner only pairs fields by name similarity, so drafted repairs are mostly
+  rules-solvable. Agent lift shows up on cases the reviewer turns into semantic renames (an
+  `unmappable` or ambiguous row fixed to a differently named added field); with few of those,
+  the rules-vs-agent gap is small by construction, not because the agent adds nothing.
 - Record values are synthetic, so value-format edge cases from real traffic are not covered.
 - Meaning drift is out of scope (`meaning=False`).
 - Eval models are lax Pydantic models, like real users' models: a retype that Pydantic
