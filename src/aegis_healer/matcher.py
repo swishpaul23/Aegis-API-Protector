@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from aegis_healer.mapping import apply_mappings
-from aegis_healer.paths import has_path, leaf, norm
+from aegis_healer.paths import has_path, norm
 from aegis_healer.types import SIMPLE_TRANSFORMS, DriftReport, FieldMapping, MatchResult
 
 
@@ -41,11 +41,23 @@ def _working_transform(
     return None
 
 
+def _wrapped_or_unwrapped(a: str, b: str) -> bool:
+    """True if one path is the other with parents added on top (`email` <-> `contact.email`).
+
+    Swapping a parent for a different one (`a.x` -> `b.x`) is not: same leaf name under a
+    different object is often a different field, so that case is left to the agent.
+    """
+    pa = [norm(p) for p in a.split(".")]
+    pb = [norm(p) for p in b.split(".")]
+    short, long_ = sorted((pa, pb), key=len)
+    return long_[len(long_) - len(short) :] == short
+
+
 def _candidates(target: str, pool: list[str]) -> tuple[list[str], float, str]:
     rule_a = [s for s in pool if norm(s) == norm(target)]
     if rule_a:
         return rule_a, 1.0, "renamed (same name, different style)"
-    rule_b = [s for s in pool if norm(leaf(s)) == norm(leaf(target))]
+    rule_b = [s for s in pool if _wrapped_or_unwrapped(s, target)]
     return rule_b, 0.95, "moved (same name, new location)"
 
 

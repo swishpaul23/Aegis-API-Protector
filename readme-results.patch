@@ -1,0 +1,43 @@
+From 82a91ee6796746b1ee771598df523a949b2ce64a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 00:23:14 -0700
+Subject: [PATCH] docs: real-API eval results table in README
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01RHPvsHMmJop1qL4MVVjGw7
+---
+ README.md | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/README.md b/README.md
+index a3d94ef..f12c1a4 100644
+--- a/README.md
++++ b/README.md
+@@ -15,6 +15,24 @@ becomes a Unix timestamp. Pipelines either crash or, worse, silently load bad da
+ catches the drift, proposes a fix, proves the fix works on real records, and only then
+ applies it.
+ 
++## Results on real API changes
++
++Tested on 49 real breaking changes mined from the public OpenAPI history of Stripe, GitHub,
++Twilio and Box (frozen test set, run once, Aegis 0.1.2, Claude Haiku):
++
++| | Rules only | Rules + agent |
++|---|---|---|
++| Fixable changes repaired (19) | 4 (21%) | **14 (74%)** |
++| Deleted fields correctly refused (30) | 30 (100%) | **30 (100%)** |
++| Wrong fixes auto-applied (49) | 0 | **0** |
++| Sent to human review instead | 15 | 5 |
++| LLM cost | none | $0.02 |
++
++Schema changes are real; record values are synthetic. Cases were labeled by Claude against
++the written rules in [`evals/real_api/LABELING.md`](evals/real_api/LABELING.md), not by a
++human. Three type changes that never broke the model are excluded. Full report and method:
++[`evals/real_api/`](evals/real_api/README.md).
++
+ ## Library
+ 
+ ```python
+-- 
+2.43.0
+

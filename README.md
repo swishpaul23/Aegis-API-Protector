@@ -54,9 +54,10 @@ detect → diff → rule matcher → (agent, only for what's left) → validate 
 
 1. **Detect**: validate records against your model and list missing, unexpected and retyped fields.
 2. **Rule matcher**: fixes only drift with exactly one sensible answer: same name in a
-   different style (`userName` → `user_name`), same name in a new place
-   (`contact.email` → `email`), or a safe type conversion. If two fields could match, it
-   doesn't guess.
+   different style (`userName` → `user_name`), same name in a new place when the field was
+   just wrapped or unwrapped (`contact.email` → `email`), or a safe type conversion. A
+   field whose parent object changed (`billing.currency` → `limits.currency`) goes to the
+   agent instead. If two fields could match, it doesn't guess.
 3. **Agent**: a LangGraph loop (propose → check → retry with the errors) on the fields the
    rules couldn't settle. It can also declare a field **unmappable** with a reason, e.g.
    a UUID string can't become an `int` without inventing data.
@@ -64,6 +65,21 @@ detect → diff → rule matcher → (agent, only for what's left) → validate 
 5. **Apply or queue**: rule fixes need no approval. Agent fixes apply automatically only if
    every one is at or above `auto_apply_threshold` (default `0.9`; `1.0` means a human
    approves every agent fix). Everything else waits in `aegis review`.
+
+
+## Results on real API changes
+
+Tested on 49 real breaking changes mined from the public OpenAPI history of Stripe, GitHub,
+Twilio and Box (frozen test set, run once, Aegis 0.1.2, Claude Haiku):
+
+| | Rules only | Rules + agent |
+|---|---|---|
+| Fixable changes repaired (19) | 4 (21%) | **14 (74%)** |
+| Deleted fields correctly refused (30) | 30 (100%) | **30 (100%)** |
+| Wrong fixes auto-applied (49) | 0 | **0** |
+| Sent to human review instead | 15 | 5 |
+| LLM cost | none | $0.02 |
+
 
 ## Self-healing pipeline
 
