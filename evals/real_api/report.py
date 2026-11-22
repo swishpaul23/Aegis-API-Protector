@@ -42,6 +42,7 @@ def _mode_block(rows: list[Row]) -> dict[str, Any]:
         "wrong_applied_ids": sorted(c.id for c, o, _ in head if o == "wrong_applied"),
         "dev_wrong_applied_ids": sorted(c.id for c, o, _ in dev if o == "wrong_applied"),
         "usage": _usage_dict(rows),
+        "headline_usage": _usage_dict(head),
     }
 
 
@@ -126,14 +127,19 @@ def _render(data: dict[str, Any]) -> str:
     out += ["", "## Dev split and unconfirmed cases (not headline)", ""]
     out += _compare_table("Dev / drafted", rules["dev"], agent["dev"])
     out += ["## Usage (agent run)", ""]
-    u = agent["usage"]
-    out += [
-        f"- LLM calls: {u['calls']}",
-        f"- Input tokens: {u['input_tokens']}",
-        f"- Output tokens: {u['output_tokens']}",
-        f"- est_cost_usd: ${u['est_cost_usd']:.4f}",
-        "",
-    ]
+    for label, u in (
+        ("Headline rows only (confirmed test split)", agent["headline_usage"]),
+        ("All cases incl. dev/unconfirmed", agent["usage"]),
+    ):
+        out += [
+            f"### {label}",
+            "",
+            f"- LLM calls: {u['calls']}",
+            f"- Input tokens: {u['input_tokens']}",
+            f"- Output tokens: {u['output_tokens']}",
+            f"- est_cost_usd: ${u['est_cost_usd']:.4f}",
+            "",
+        ]
     return "\n".join(out)
 
 

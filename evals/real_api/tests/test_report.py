@@ -84,3 +84,16 @@ def test_zero_confirmed_cases_writes_files_without_dividing(tmp_path):
     jp, mp = write_report([], [], tmp_path, META)
     assert jp.exists()
     assert "no confirmed test cases" in mp.read_text().lower()
+
+
+def test_usage_sections_are_labelled_by_scope(tmp_path):
+    (t1,) = _ids("test", 1)
+    (d1,) = _ids("dev", 1)
+    rows = [(_case(t1), "repaired", U), (_case(d1), "repaired", U)]
+    jp, mp = write_report(rows, rows, tmp_path, META)
+    md = mp.read_text()
+    assert "Headline rows only (confirmed test split)" in md
+    assert "All cases incl. dev/unconfirmed" in md
+    data = json.loads(jp.read_text())
+    assert data["agent"]["headline_usage"]["input_tokens"] == 1000
+    assert data["agent"]["usage"]["input_tokens"] == 2000
