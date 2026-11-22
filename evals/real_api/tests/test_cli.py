@@ -15,15 +15,15 @@ def _no_live_preflight(monkeypatch):
     monkeypatch.setattr(runner, "preflight_agent", lambda: None)
 
 
-def _seed_dir(tmp_path):
+def _seed_dir(tmp_path, confirmed=False):
     d = tmp_path / "cases"
     for c in SEEDS:
-        save_case(c, d)
+        save_case(c.model_copy(update={"label_status": "confirmed"}) if confirmed else c, d)
     return d
 
 
 def test_run_defaults_to_test_split(tmp_path, monkeypatch):
-    cases = _seed_dir(tmp_path)
+    cases = _seed_dir(tmp_path, confirmed=True)
     seen = {}
 
     def fake_run_all(cs, mode, tmp_root):
@@ -94,21 +94,26 @@ def test_mine_does_not_overwrite_existing_case(tmp_path, monkeypatch, capsys):
     assert "two" in out and "no pairs" in out
 
 
-def _run(cases, out, split, mode="rules"):
+def _run(cases, out, split, mode="rules", *extra):
     return cli.main(
-        ["run", "--split", split, "--mode", mode, "--cases", str(cases), "--out", str(out)]
+        ["run", "--split", split, "--mode", mode, "--cases", str(cases), "--out", str(out), *extra]
     )
 
 
 def _split_seed_dir(tmp_path):
-    """Seed cases plus filler so both splits are non-empty."""
-    d = _seed_dir(tmp_path)
+    """Seed cases plus filler so both splits are non-empty; test-split cases are confirmed,
+    dev-split ones drafted."""
+    d = tmp_path / "cases"
     have = {split_of(c.id) for c in SEEDS}
+    extra = []
     for want in {"dev", "test"} - have:
         i = 0
         while split_of(f"fill-{i}") != want:
             i += 1
-        save_case(SEEDS[0].model_copy(update={"id": f"fill-{i}"}), d)
+        extra.append(SEEDS[0].model_copy(update={"id": f"fill-{i}"}))
+    for c in [*SEEDS, *extra]:
+        status = "confirmed" if split_of(c.id) == "test" else "drafted"
+        save_case(c.model_copy(update={"label_status": status}), d)
     return d
 
 
@@ -132,7 +137,7 @@ def test_same_day_dev_and_test_runs_do_not_overwrite(tmp_path):
     out = tmp_path / "out"
     assert _run(cases, out, "dev") == 0
     assert _run(cases, out, "test") == 0
-    assert _run(cases, out, "test") == 0
+    assert _run(cases, out, "test", "rules", "--rerun") == 0
     dirs = sorted(p.name for p in out.iterdir() if p.is_dir())
     assert len(dirs) == 3
     assert dirs[0].endswith("-dev-1")
@@ -212,7 +217,7 @@ def test_zero_case_run_exits_1_and_creates_nothing(tmp_path, capsys):
     empty.mkdir()
     assert _run(empty, out, "test") == 1
     assert not out.exists()
-    assert "no cases" in capsys.readouterr().err
+    assert "no confirmed cases" in capsys.readouterr().err
 
 
 def test_no_args_is_usage_error():
@@ -255,3 +260,51 @@ def test_run_agent_outage_exits_2_and_writes_no_agent_rows(tmp_path, monkeypatch
     assert not (run_dir / "raw-agent.json").exists()
     assert not list(run_dir.glob("*.md"))
     assert "agent_error" in capsys.readouterr().err
+
+
+def test_test_split_runs_only_confirmed_dev_runs_all(tmp_path, monkeypatch):
+    d = tmp_path / "cases"
+    by_split: dict[str, list] = {"dev": [], "test": []}
+    i = 0
+    while min(len(v) for v in by_split.values()) < 2:
+        cid = f"c-{i}"
+        if len(by_split[split_of(cid)]) < 2:
+            by_split[split_of(cid)].append(cid)
+        i += 1
+    for ids in by_split.values():
+        for cid, status in zip(ids, ("confirmed", "drafted"), strict=True):
+            save_case(SEEDS[0].model_copy(update={"id": cid, "label_status": status}), d)
+    seen = {}
+    monkeypatch.setattr(cli, "run_all", lambda cs, mode, t: seen.setdefault(mode, cs) and [])
+    out = tmp_path / "out"
+    assert _run(d, out, "test") == 0
+    assert [c.id for c in seen.pop("rules")] == [by_split["test"][0]]
+    assert _run(d, out, "dev") == 0
+    assert sorted(c.id for c in seen["rules"]) == sorted(by_split["dev"])
+
+
+def test_test_split_with_no_confirmed_cases_exits_1(tmp_path, capsys):
+    cases = _seed_dir(tmp_path)  # all drafted, all in the test split
+    out = tmp_path / "out"
+    assert _run(cases, out, "test") == 1
+    assert not out.exists()
+    assert "confirmed" in capsys.readouterr().err
+
+
+def test_second_test_run_refused_without_rerun(tmp_path, capsys):
+    cases = _split_seed_dir(tmp_path)
+    out = tmp_path / "out"
+    assert _run(cases, out, "test") == 0
+    first = json.loads(next(out.glob("*-test-1/raw-rules.json")).read_text(encoding="utf-8"))
+    assert first["meta"]["prior_test_runs"] == 0
+    capsys.readouterr()
+    assert _run(cases, out, "test") == 2
+    err = capsys.readouterr().err
+    assert "already" in err and "--rerun" in err
+    assert len(list(out.glob("*-test-*"))) == 1
+    assert _run(cases, out, "dev") == 0  # dev is never blocked
+    assert _run(cases, out, "test", "rules", "--rerun") == 0
+    second = json.loads(next(out.glob("*-test-2/raw-rules.json")).read_text(encoding="utf-8"))
+    assert second["meta"]["prior_test_runs"] == 1
+    md = next(out.glob("*-test-2/*.md")).read_text(encoding="utf-8")
+    assert "Prior test runs: 1" in md

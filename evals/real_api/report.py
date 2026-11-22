@@ -121,7 +121,7 @@ def _listed(rules: dict, agent: dict, prefix: str) -> list[str]:
     return out
 
 
-_EXTRA_META = ("split", "run", "modes_run")
+_EXTRA_META = ("split", "run", "modes_run", "prior_test_runs")
 
 
 def _render(data: dict[str, Any]) -> str:

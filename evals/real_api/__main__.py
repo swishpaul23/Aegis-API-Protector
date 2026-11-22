@@ -93,6 +93,13 @@ def _new_run_dir(out: Path, date: str, split: str) -> Path:
         return run_dir
 
 
+def _test_runs(out: Path) -> list[Path]:
+    """Existing test-split run directories (`<date>-test-<n>`) under out."""
+    if not out.is_dir():
+        return []
+    return sorted(p for p in out.glob("*-test-*") if p.is_dir())
+
+
 def _run_key(run_dir: Path) -> tuple[str, int]:
     """Sort key: newest created_at from the run's raw files, then run number."""
     stamps = []
@@ -132,18 +139,31 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print("error: ANTHROPIC_API_KEY not set (needed for agent mode)", file=sys.stderr)
         return 2
     cases = [c for c in load_cases(Path(args.cases)) if split_of(c.id) == args.split]
+    if args.split == "test":  # the scored split: human-confirmed labels only
+        cases = [c for c in cases if c.label_status == "confirmed"]
     if not cases:
-        print(f"error: no cases in the {args.split} split ({args.cases})", file=sys.stderr)
+        which = "confirmed cases in the test" if args.split == "test" else "cases in the dev"
+        print(f"error: no {which} split ({args.cases})", file=sys.stderr)
         return 1
+    out = Path(args.out)
+    prior = _test_runs(out)
+    if args.split == "test" and prior and not args.rerun:
+        print(
+            f"error: the test split was already run ({', '.join(p.name for p in prior)}). "
+            "The headline is one run of the frozen test split; pass --rerun to run it again "
+            "(recorded as prior_test_runs in the report).",
+            file=sys.stderr,
+        )
+        return 2
     if "agent" in modes:
         try:  # before any run dir exists: a bad key or outage must not cost a test run
             runner.preflight_agent()
         except RuntimeError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
-    out = Path(args.out)
     meta = _meta()
     meta["split"] = args.split
+    meta["prior_test_runs"] = len(prior)
     meta["created_at"] = _now()
     run_dir = _new_run_dir(out, meta["date"], args.split)
     meta["run"] = run_dir.name
@@ -233,6 +253,9 @@ def _build_parser() -> argparse.ArgumentParser:
     n = sub.add_parser("run", help="run the eval and write the report")
     n.add_argument("--split", choices=["test", "dev"], default="test")
     n.add_argument("--mode", choices=["rules", "agent", "both"], default="both")
+    n.add_argument(
+        "--rerun", action="store_true", help="allow running the test split again (recorded)"
+    )
     common(n, out=True)
     rp = sub.add_parser("report", help="re-render the report from the latest raw files")
     rp.add_argument("run_dir", nargs="?", help="run directory (default: latest under --out)")

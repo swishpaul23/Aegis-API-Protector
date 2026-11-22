@@ -49,8 +49,13 @@ pair (e.g. `id` int -> string in two schemas); that errs toward a smaller N, nev
 Cases split ~30% dev / 70% test by a stable hash of the case id (`split_of`).
 
 - **Headline = confirmed cases in the test split, run once.** Never tune against it.
-- **Dev** is for finding and fixing bugs. Use `--split dev`.
-- Only human-confirmed cases count toward the headline; drafted ones appear under dev only.
+- `run --split test` runs **only confirmed** cases (drafted test cases are not run at all, so
+  nothing is seen before the labels are frozen). It refuses (exit 2) if any
+  `<date>-test-<n>` run directory already exists under `--out`, unless `--rerun` is passed;
+  every run records `prior_test_runs` (the number of existing test run directories) in its
+  meta and report, so a re-run headline is visibly a re-run.
+- **Dev** is for finding and fixing bugs. `--split dev` runs every dev case, drafted included;
+  dev results never enter the headline.
 
 ## Review (REVIEW.md)
 
@@ -86,7 +91,8 @@ python -m evals.real_api review render                # then edit REVIEW.md by h
 python -m evals.real_api review apply
 python -m evals.real_api run --split dev --mode rules # iterate on bugs here (own run dir)
 export ANTHROPIC_API_KEY=...                          # agent mode only
-python -m evals.real_api run                          # headline: test split, both modes
+python -m evals.real_api run                          # headline: test split, both modes, once
+python -m evals.real_api run --rerun                  # only if you must; recorded in meta
 python -m evals.real_api report [RUN_DIR]            # re-render one run (default: latest)
 ```
 
@@ -108,7 +114,7 @@ label_status) plus the report `<date>.md` / `<date>.json` (N, per-API and per-ki
 tokens, cost, Aegis version, model, date, split, run). `report [RUN_DIR]` re-renders from that
 run's own raw files and stored meta only; it warns if a case's label_status changed since the
 run and uses the stored one. A mode with no raw file in the run shows as not run. A run with
-zero cases in the split exits 1 and creates nothing.
+zero cases to run (for test: zero confirmed test cases) exits 1 and creates nothing.
 
 **Numbers in the resume or README come from `results/*.md` only.**
 
