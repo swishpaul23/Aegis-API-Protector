@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from evals.real_api.cases import Case, ExpectedMap, load_cases, save_case
+from evals.real_api.payloads import build_model, make_new_payload, make_old_records
 
 HEADER = (
     "| id | api | kind | change | ambiguous | source | notes | confirm | fix? | fix |\n"
@@ -119,6 +120,46 @@ def _parse_fix(text: str) -> tuple[str, list[ExpectedMap]]:
     return "repair", maps
 
 
+# convert -> (old type, new type) it requires; None = types must be equal
+_CONVERT_TYPES: dict[str, tuple[str, str] | None] = {
+    "none": None,
+    "int_str": ("integer", "string"),
+    "int_float": ("integer", "number"),
+    "epoch_iso": ("datetime", "integer"),
+}
+
+
+def _check_runnable(case: Case) -> None:
+    """Raise ValueError unless the label is achievable and the eval can build the case."""
+    if case.expected == "repair":
+        targets = {m.target for m in case.maps}
+        for path in case.old_fields:
+            if path not in case.new_fields and path not in targets:
+                raise ValueError(f"unmapped removed field: {path}")
+        for m in case.maps:
+            if m.target not in case.old_fields or m.source not in case.new_fields:
+                continue  # reported below by make_new_payload / the caller
+            old_t, new_t = case.old_fields[m.target], case.new_fields[m.source]
+            need = _CONVERT_TYPES[m.convert]
+            if need is None and old_t != new_t:
+                raise ValueError(
+                    f"map {m.target}<-{m.source}: convert none needs equal types "
+                    f"({old_t} -> {new_t})"
+                )
+            if need is not None and (old_t, new_t) != need:
+                raise ValueError(
+                    f"map {m.target}<-{m.source}: convert {m.convert} needs old {need[0]}, "
+                    f"new {need[1]} (got {old_t} -> {new_t})"
+                )
+    try:
+        model = build_model("Model", case.old_fields)
+        old = make_old_records(case)
+        make_new_payload(case, old)
+        [model(**r) for r in old]
+    except Exception as exc:
+        raise ValueError(f"dry run failed: {type(exc).__name__}: {exc}") from exc
+
+
 def _apply_fix(case: Case, text: str) -> Case:
     expected, maps = _parse_fix(text)
     targets = [m.target for m in maps]
@@ -129,10 +170,14 @@ def _apply_fix(case: Case, text: str) -> Case:
             raise ValueError(f"target {m.target!r} not in old_fields")
         if m.source not in case.new_fields:
             raise ValueError(f"source {m.source!r} not in new_fields")
-    update = {"expected": expected, "maps": maps, "label_status": "confirmed"}
+    update: dict = {"expected": expected, "maps": maps, "label_status": "confirmed"}
     if expected == "refuse":
         update["kind"] = "unmappable"
-    return Case.model_validate({**case.model_dump(), **update})
+    elif case.kind == "unmappable":  # a semantic rename the miner missed
+        update["kind"] = "retype" if any(m.convert != "none" for m in maps) else "rename"
+    new = Case.model_validate({**case.model_dump(), **update})
+    _check_runnable(new)
+    return new
 
 
 def apply_review(cases_dir: Path, review: Path) -> dict[str, list[str] | int]:
@@ -179,6 +224,11 @@ def apply_review(cases_dir: Path, review: Path) -> dict[str, list[str] | int]:
                 res["rejected"].append(cid)
                 continue
             new = case.model_copy(update={"label_status": "confirmed"})
+            try:
+                _check_runnable(new)
+            except ValueError as e:
+                res["errors"].append(f"{cid}: {str(e).splitlines()[0]}")
+                continue
         elif fix_mark:
             res["needs_fix"].append(cid)
             continue

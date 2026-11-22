@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from evals.real_api.cases import Case, ExpectedMap, load_cases, save_case
 from evals.real_api.review import apply_review, render_review
 
@@ -15,7 +17,10 @@ def _case(cid: str, **kw) -> Case:
         old_fields={"a": "string", "c": "integer"},
         new_fields={"b": "string", "d": "string"},
         expected="repair",
-        maps=[ExpectedMap(target="a", source="b")],
+        maps=[
+            ExpectedMap(target="a", source="b"),
+            ExpectedMap(target="c", source="d", convert="int_str"),
+        ],
     )
     base.update(kw)
     return Case(**base)
@@ -119,14 +124,14 @@ def test_ambiguous_confirm_without_fix_is_rejected(tmp_path):
 def test_fix_sets_two_maps_and_confirms(tmp_path):
     d, rv = _setup(tmp_path, _ambiguous("amb"))
     render_review(d, rv)
-    _edit(rv, "amb", fix="a<-b:int_str; c<-d")
+    _edit(rv, "amb", fix="a<-b; c<-d:int_str")
     res = apply_review(d, rv)
     c = _by_id(d)["amb"]
     assert res["confirmed"] == ["amb"]
     assert c.label_status == "confirmed" and c.expected == "repair"
     assert [(m.target, m.source, m.convert) for m in c.maps] == [
-        ("a", "b", "int_str"),
-        ("c", "d", "none"),
+        ("a", "b", "none"),
+        ("c", "d", "int_str"),
     ]
 
 
@@ -216,7 +221,7 @@ def test_stripped_id_backtick_is_malformed(tmp_path):
 def test_render_apply_roundtrip_with_pipe_in_notes(tmp_path):
     d, rv = _setup(tmp_path, _ambiguous("amb"))
     render_review(d, rv)
-    _edit(rv, "amb", fix="a<-b")
+    _edit(rv, "amb", fix="a<-b; c<-d:int_str")
     res = apply_review(d, rv)
     assert res["confirmed"] == ["amb"] and res["n_malformed"] == 0
     assert _by_id(d)["amb"].notes == "a->b 0.9 | a->d 0.8"
@@ -247,3 +252,51 @@ def test_contradictory_ticks_error(tmp_path):
     _edit(rv, "one", confirm=True, fix_mark=True)
     res = apply_review(d, rv)
     assert res["errors"] == ["one: contradictory ticks"] and _by_id(d)["one"] == before
+
+
+def _fix_errors(tmp_path: Path, case: Case, fix: str) -> list[str]:
+    d, rv = _setup(tmp_path, case)
+    before = _by_id(d)[case.id]
+    render_review(d, rv)
+    _edit(rv, case.id, fix=fix)
+    res = apply_review(d, rv)
+    assert _by_id(d)[case.id] == before  # case unchanged on error
+    return res["errors"]
+
+
+def test_partial_fix_leaving_removed_field_unmapped_is_error(tmp_path):
+    errs = _fix_errors(tmp_path, _ambiguous("amb"), "a<-b")
+    assert errs == ["amb: unmapped removed field: c"]
+
+
+@pytest.mark.parametrize(
+    "fix, msg",
+    [
+        ("a<-b; c<-d", "convert none needs equal types"),
+        ("a<-b:int_str; c<-d:int_str", "convert int_str needs old integer, new string"),
+        ("a<-b; c<-d:int_float", "convert int_float needs old integer, new number"),
+        ("a<-b; c<-d:epoch_iso", "convert epoch_iso needs old datetime, new integer"),
+    ],
+)
+def test_fix_convert_must_fit_types(tmp_path, fix, msg):
+    errs = _fix_errors(tmp_path, _ambiguous("amb"), fix)
+    assert len(errs) == 1 and msg in errs[0], errs
+
+
+def test_fix_that_cannot_build_payloads_is_error(tmp_path):
+    # new_fields has a prefix conflict, so the dry run raises
+    case = _ambiguous("amb").model_copy(
+        update={"new_fields": {"b": "string", "d": "string", "d.x": "string"}}
+    )
+    errs = _fix_errors(tmp_path, case, "a<-b; c<-d:int_str")
+    assert len(errs) == 1 and errs[0].startswith("amb: dry run failed"), errs
+
+
+def test_confirm_of_unrunnable_draft_is_error(tmp_path):
+    case = _case("one", maps=[ExpectedMap(target="a", source="b")])  # c left unmapped
+    d, rv = _setup(tmp_path, case)
+    render_review(d, rv)
+    _edit(rv, "one", confirm=True)
+    res = apply_review(d, rv)
+    assert res["errors"] == ["one: unmapped removed field: c"]
+    assert _by_id(d)["one"].label_status == "drafted"

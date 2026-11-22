@@ -116,7 +116,7 @@ def test_run_rules_writes_raw_and_report(tmp_path):
     assert raw["meta"]["run"] == run_dir.name
     ids = {c.id for c in load_cases(cases) if split_of(c.id) == "dev"}
     assert {r["id"] for r in raw["rows"]} == ids
-    assert all("label_status" in r and "usage" in r for r in raw["rows"])
+    assert all("label_status" in r and "usage" in r and "error" in r for r in raw["rows"])
     assert list(run_dir.glob("*.md")) and list(run_dir.glob("*.json"))
 
 

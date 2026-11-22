@@ -121,6 +121,13 @@ def _convert(value: Any, kind: str, old_type: str) -> Any:
 def make_new_payload(case: Case, old_records: list[dict]) -> list[dict]:
     """Reshape each old record per case.maps; unmapped shared fields carry over."""
     targets = {m.target for m in case.maps}
+    sources = [m.source for m in case.maps]
+    if len(set(sources)) != len(sources):
+        raise ValueError("duplicate map source")
+    for src in sources:
+        if src not in case.new_fields:
+            raise ValueError(f"map source {src!r} not in new_fields")
+    _tree(case.new_fields)  # raises on prefix conflicts (a path that is also a parent)
     out = []
     for old in old_records:
         new: dict = {}

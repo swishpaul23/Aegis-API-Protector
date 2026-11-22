@@ -8,13 +8,17 @@ from typing import Any
 
 from aegis_healer.agent import Usage
 from evals.real_api.cases import Case, split_of
-from evals.real_api.scoring import EXCLUDED_FROM_N, OUTCOMES, Outcome, summarize
+from evals.real_api.runner import Row
+from evals.real_api.scoring import EXCLUDED_FROM_N, OUTCOMES, summarize
 
 HONESTY_NOTE = (
     "Schema changes are real (mined from public API spec history); record values are synthetic."
 )
 
-Row = tuple[Case, Outcome, Usage]
+__all__ = ["HONESTY_NOTE", "Row", "write_report"]
+
+# Outcomes listed case by case (with the recorded reason) under each split.
+LISTED: tuple[str, ...] = ("wrong_applied", "crashed")
 
 
 def _is_headline(case: Case) -> bool:
@@ -23,7 +27,7 @@ def _is_headline(case: Case) -> bool:
 
 def _usage_dict(rows: list[Row]) -> dict[str, Any]:
     total = Usage()
-    for _, _, u in rows:
+    for _, _, u, _ in rows:
         total.add(u)
     return {
         "calls": total.calls,
@@ -36,14 +40,17 @@ def _usage_dict(rows: list[Row]) -> dict[str, Any]:
 def _mode_block(rows: list[Row]) -> dict[str, Any]:
     head = [r for r in rows if _is_headline(r[0])]
     dev = [r for r in rows if not _is_headline(r[0])]
-    return {
-        "headline": summarize([(c, o) for c, o, _ in head]),
-        "dev": summarize([(c, o) for c, o, _ in dev]),
-        "wrong_applied_ids": sorted(c.id for c, o, _ in head if o == "wrong_applied"),
-        "dev_wrong_applied_ids": sorted(c.id for c, o, _ in dev if o == "wrong_applied"),
+    out: dict[str, Any] = {
+        "headline": summarize([(c, o) for c, o, _, _ in head]),
+        "dev": summarize([(c, o) for c, o, _, _ in dev]),
         "usage": _usage_dict(rows),
         "headline_usage": _usage_dict(head),
     }
+    for o in LISTED:
+        out[f"{o}_ids"] = sorted(c.id for c, oc, _, _ in head if oc == o)
+        out[f"dev_{o}_ids"] = sorted(c.id for c, oc, _, _ in dev if oc == o)
+    out["errors"] = {c.id: e for c, _, _, e in sorted(rows, key=lambda r: r[0].id) if e}
+    return out
 
 
 def _pct(x: float) -> str:
@@ -94,6 +101,22 @@ def _compare_table(title: str, rules: dict, agent: dict) -> list[str]:
     return lines
 
 
+_TITLES = {"wrong_applied": "Wrongly applied", "crashed": "Crashed"}
+
+
+def _listed(rules: dict, agent: dict, prefix: str) -> list[str]:
+    out: list[str] = []
+    for o in LISTED:
+        out += [f"### {_TITLES[o]} (case ids)", ""]
+        for label, block in (("Rules only", rules), ("Agent", agent)):
+            ids = block.get(f"{prefix}{o}_ids", [])
+            errs = block.get("errors", {})
+            shown = [f"{i} ({errs[i]})" if i in errs else i for i in ids]
+            out.append(f"- {label}: {', '.join(shown) if shown else 'none'}")
+        out.append("")
+    return out
+
+
 _EXTRA_META = ("split", "run", "modes_run")
 
 
@@ -128,14 +151,10 @@ def _render(data: dict[str, Any]) -> str:
     out += _compare_table("Rules only vs rules + agent", rh, ah)
     out += _breakdown("Per API", "by_api", rh, ah)
     out += _breakdown("Per kind", "by_kind", rh, ah)
-    out += ["### Wrongly applied (case ids)", ""]
-    for label, ids in (
-        ("Rules only", rules["wrong_applied_ids"]),
-        ("Agent", agent["wrong_applied_ids"]),
-    ):
-        out.append(f"- {label}: {', '.join(ids) if ids else 'none'}")
-    out += ["", "## Dev split and unconfirmed cases (not headline)", ""]
+    out += _listed(rules, agent, "")
+    out += ["## Dev split and unconfirmed cases (not headline)", ""]
     out += _compare_table("Dev / drafted", rules["dev"], agent["dev"])
+    out += _listed(rules, agent, "dev_")
     out += ["## Usage (agent run)", ""]
     for label, u in (
         ("Headline rows only (confirmed test split)", agent["headline_usage"]),

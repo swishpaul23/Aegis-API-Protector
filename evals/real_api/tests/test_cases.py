@@ -37,3 +37,14 @@ def test_refuse_case_must_have_no_maps():
     with pytest.raises(ValidationError):
         _case(expected="refuse", kind="unmappable")
     assert _case(expected="refuse", kind="unmappable", maps=[]).maps == []
+
+
+def test_unambiguous_repair_requires_maps():
+    with pytest.raises(ValidationError, match="non-empty maps"):
+        _case(maps=[])
+    assert _case(maps=[], ambiguous=True).maps == []  # drafted ambiguous cases may be empty
+
+
+def test_unmappable_requires_refuse():
+    with pytest.raises(ValidationError, match="unmappable"):
+        _case(kind="unmappable")

@@ -33,9 +33,13 @@ class Case(BaseModel):
     notes: str = ""
 
     @model_validator(mode="after")
-    def _refuse_has_no_maps(self) -> Case:
+    def _labels_consistent(self) -> Case:
         if self.expected == "refuse" and self.maps:
             raise ValueError("refuse cases must have empty maps")
+        if self.expected == "repair" and not self.ambiguous and not self.maps:
+            raise ValueError("unambiguous repair cases need non-empty maps")
+        if self.kind == "unmappable" and self.expected != "refuse":
+            raise ValueError("unmappable cases must have expected='refuse'")
         return self
 
 

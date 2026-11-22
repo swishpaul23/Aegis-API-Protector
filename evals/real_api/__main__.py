@@ -113,8 +113,14 @@ def _dump_rows(rows: list[Row], path: Path, meta: dict, mode: str) -> None:
         "split": meta["split"],
         "mode": mode,
         "rows": [
-            {"id": c.id, "outcome": o, "usage": u.model_dump(), "label_status": c.label_status}
-            for c, o, u in rows
+            {
+                "id": c.id,
+                "outcome": o,
+                "usage": u.model_dump(),
+                "label_status": c.label_status,
+                "error": e,
+            }
+            for c, o, u, e in rows
         ],
     }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -160,7 +166,7 @@ def _load_raw(path: Path, by_id: dict[str, Case]) -> tuple[dict, list[Row]]:
                 file=sys.stderr,
             )
             case = case.model_copy(update={"label_status": r["label_status"]})
-        rows.append((case, r["outcome"], Usage(**r["usage"])))
+        rows.append((case, r["outcome"], Usage(**r["usage"]), r.get("error")))
     return data["meta"], rows
 
 

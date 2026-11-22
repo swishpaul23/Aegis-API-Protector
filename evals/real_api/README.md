@@ -20,7 +20,7 @@ Each case is scored into one outcome:
 | wrong_applied | Healed, but values differ, or healed a case that should be refused. Silent corruption: the headline safety metric. |
 | correct_refusal | Expected a refusal; nothing was applied. |
 | safe_deferral | Expected a repair but nothing was applied (left pending/failed for a human). Not an error. |
-| crashed | An exception. Counted as a failure and listed. |
+| crashed | An exception while building the case or healing. Counted as a failure and listed with its reason; one bad case never aborts the run. |
 | not_breaking | Expected a repair, but Healer returned `ok` (no drift detected) with the expected values: the change did not break the model, so Aegis did nothing. **Excluded from N** and reported separately in every table. `ok` with wrong values, or `ok` on a refuse case, is wrong_applied. |
 
 Headline = repaired / N, where N = confirmed test cases whose outcome is not not_breaking,
@@ -45,6 +45,12 @@ Cases split ~30% dev / 70% test by a stable hash of the case id (`split_of`).
    `int_str`, `int_float`, `epoch_iso`. `target` is a path in the old model, `source` a path in
    the new payload.
 4. Ambiguous rows cannot be confirmed as-is; they need a written fix (or `REFUSE`).
+   A repair label (confirmed or fixed) is only accepted if it is achievable and runnable:
+   every old field missing from the new schema must be a map target (else
+   `unmapped removed field: X`); each convert must fit the types (`none`: equal types,
+   `int_str`: integer -> string, `int_float`: integer -> number, `epoch_iso`: datetime ->
+   integer); and a dry run that builds the model and both payloads must succeed. Otherwise the
+   row is an error and the case is left unchanged.
 5. `python -m evals.real_api review apply` writes the labels back. It lists confirmed,
    rejected, needs_fix, errors, malformed and missing rows, and exits non-zero if any of
    errors, malformed or missing is non-empty, so nothing is lost silently.

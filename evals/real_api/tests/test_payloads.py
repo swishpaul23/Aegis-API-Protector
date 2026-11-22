@@ -132,3 +132,25 @@ def test_unknown_convert_combo_raises():
     )
     with pytest.raises(ValueError):
         make_new_payload(case, make_old_records(case))
+
+
+@pytest.mark.parametrize(
+    "new, maps, match",
+    [
+        (
+            {"x": "string"},
+            [ExpectedMap(target="a", source="x"), ExpectedMap(target="b", source="x")],
+            "duplicate map source",
+        ),
+        ({"x": "string"}, [ExpectedMap(target="a", source="y")], "not in new_fields"),
+        (
+            {"x": "string", "x.y": "string"},
+            [ExpectedMap(target="a", source="x.y")],
+            "path conflict",
+        ),
+    ],
+)
+def test_make_new_payload_rejects_bad_maps(new, maps, match):
+    case = _case({"a": "string", "b": "string"}, new, maps)
+    with pytest.raises(ValueError, match=match):
+        make_new_payload(case, make_old_records(case))
