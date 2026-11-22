@@ -18,7 +18,16 @@ from evals.real_api.cases import Case, ExpectedMap, load_cases, save_case
 from evals.real_api.payloads import build_model, make_new_payload, make_old_records
 
 COLUMNS = (
-    "id", "api", "kind", "change", "ambiguous", "context", "source", "notes", "confirm", "fix?",
+    "id",
+    "api",
+    "kind",
+    "change",
+    "ambiguous",
+    "context",
+    "source",
+    "notes",
+    "confirm",
+    "fix?",
     "fix",
 )
 N_CELLS = len(COLUMNS)

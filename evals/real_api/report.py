@@ -213,9 +213,7 @@ def write_report(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     data = {
-        "meta": {
-            k: meta[k] for k in ("aegis_version", "model", "date", *_EXTRA_META) if k in meta
-        },
+        "meta": {k: meta[k] for k in ("aegis_version", "model", "date", *_EXTRA_META) if k in meta},
         "honesty_note": HONESTY_NOTE,
         "rules": _mode_block(rules_rows),
         "agent": _mode_block(agent_rows),
