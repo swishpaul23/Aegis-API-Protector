@@ -12,6 +12,8 @@ from evals.real_api.cases import FieldType
 MAX_DEPTH = 4  # max inline nesting depth (dots in a path)
 MAX_REF_HOPS = 1  # a referenced schema's own $refs are not followed
 MAX_PATHS = 2000  # per-schema budget; expansion stops beyond it
+MAX_RESOLVE_DEPTH = 40  # path_exists: total $ref/allOf/anyOf/oneOf hops before giving up
+_LOCAL_REFS = ("#/components/schemas/", "#/definitions/")
 
 
 def clone_repo(repo_url: str, repo_dir: Path) -> None:
@@ -84,3 +86,53 @@ def flatten_schemas(spec: dict) -> dict[str, dict[str, FieldType]]:
         walk(schema, "", frozenset({name}), 0, fields)
         result[name] = fields
     return result
+
+
+def _all_schemas(spec: dict) -> dict[str, Any]:
+    return spec.get("components", {}).get("schemas", {}) or spec.get("definitions", {}) or {}
+
+
+def _properties(schemas: dict[str, Any], node: Any, depth: int) -> dict[str, Any] | None:
+    """Fully resolved properties of a node: $ref followed, allOf merged, anyOf/oneOf unioned.
+
+    None when the node is not an object (or the depth guard trips).
+    """
+    if depth > MAX_RESOLVE_DEPTH or not isinstance(node, dict):
+        return None
+    if "$ref" in node:
+        ref = node["$ref"]
+        if not isinstance(ref, str) or not ref.startswith(_LOCAL_REFS):
+            return None
+        return _properties(schemas, schemas.get(ref.rsplit("/", 1)[-1]), depth + 1)
+    props: dict[str, Any] = {}
+    found = False
+    for key in ("allOf", "anyOf", "oneOf"):
+        for part in node.get(key) or []:
+            sub = _properties(schemas, part, depth + 1)
+            if sub is not None:
+                found = True
+                props.update(sub)
+    if isinstance(node.get("properties"), dict):
+        found = True
+        props.update(node["properties"])
+    return props if found else None
+
+
+def path_exists(spec: dict, schema: str, path: str) -> bool:
+    """True if the dotted path resolves in `schema` through the raw spec, with no hop cap.
+
+    Unlike flatten_schemas, every local `$ref` is followed (depth-guarded), so this is the
+    ground truth for whether a field is really present.
+    """
+    schemas = _all_schemas(spec)
+    if schema not in schemas:
+        return False
+    node: Any = schemas[schema]
+    depth = 0
+    for part in path.split("."):
+        props = _properties(schemas, node, depth)
+        if props is None or part not in props:
+            return False
+        node = props[part]
+        depth += 1
+    return isinstance(node, dict)

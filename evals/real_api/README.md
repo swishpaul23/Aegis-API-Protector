@@ -144,6 +144,11 @@ nothing.
 
 - Schema flattening follows one `$ref` hop; a referenced schema's own `$ref`s are not followed.
 - At most 2000 paths per schema; expansion stops beyond that.
+- Those two caps limit which paths are *mined*, not what counts as drift: every removed or
+  added path is checked against the fully resolved spec (`specs.path_exists`: all local
+  `$ref`s, `allOf` merged, `anyOf`/`oneOf` unioned, depth-guarded), so a field that merely
+  moved behind a second `$ref` hop is not reported as removed and the caps cannot create
+  phantom drift.
 - The rules matcher handles style renames and same-leaf moves only; the agent handles the rest.
   The miner only pairs fields by name similarity, so drafted repairs are mostly
   rules-solvable. Agent lift shows up on cases the reviewer turns into semantic renames (an

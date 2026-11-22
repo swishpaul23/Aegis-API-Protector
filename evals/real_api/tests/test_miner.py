@@ -284,3 +284,84 @@ def test_mine_skips_a_pair_whose_spec_is_missing_at_a_ref(repo: Path, capsys):
     assert found  # the good pair still yields cases
     out = capsys.readouterr().out
     assert f"skipped pair new..gone (fx {SPEC_PATH})" in out
+
+
+def _ref(name: str) -> dict:
+    return {"$ref": f"#/components/schemas/{name}"}
+
+
+def _two_hop(owner_props: dict) -> tuple[dict, dict]:
+    """A.repo switches from Big (owner inline, one hop) to Small (owner behind a second hop)."""
+    s, i = {"type": "string"}, {"type": "integer"}
+    big = {"properties": {"name": s, "owner": {"properties": {"login": s, "id": i}}}}
+    old = {"Big": big, "A": {"properties": {"title": s, "repo": _ref("Big")}}}
+    new = {
+        "Big": big,
+        "User": {"properties": owner_props},
+        "Small": {"properties": {"name": s, "owner": _ref("User")}},
+        "A": {"properties": {"title": s, "repo": _ref("Small")}},
+    }
+    return old, new
+
+
+def _removed(out: list[Case]) -> set[str]:
+    return {p for c in out for p in c.old_fields if p not in c.new_fields}
+
+
+def test_mine_ignores_fields_hidden_behind_a_second_ref_hop(tmp_path: Path):
+    s, i = {"type": "string"}, {"type": "integer"}
+    old, new = _two_hop({"login": s, "id": i})
+    old["A"]["properties"]["full_name"] = s  # a genuine rename alongside
+    new["A"]["properties"]["fullname"] = s
+    r = _two_ref_repo(tmp_path, old, new)
+    out = _by_schema(mine(Source("fx", "u", SPEC_PATH, [("o", "HEAD")]), r), "A")
+    assert [(m.target, m.source) for c in out for m in c.maps] == [("full_name", "fullname")]
+    assert not any(p.startswith("repo.owner") for p in _removed(out))
+    assert len(out) == 1
+
+
+def test_mine_keeps_genuine_removal_behind_a_second_ref_hop(tmp_path: Path):
+    s = {"type": "string"}
+    old, new = _two_hop({"id": {"type": "integer"}})  # owner.login is really gone
+    new["A"]["properties"]["repo_login"] = s
+    r = _two_ref_repo(tmp_path, old, new)
+    out = _by_schema(mine(Source("fx", "u", SPEC_PATH, [("o", "HEAD")]), r), "A")
+    assert "repo.owner.login" in _removed(out)
+    assert "repo.owner.id" not in _removed(out)  # still reachable through Small -> User
+
+
+def test_path_exists_resolves_allof_anyof_cycles_and_missing():
+    from evals.real_api.miner.specs import path_exists
+
+    s = {"type": "string"}
+    spec = {
+        "components": {
+            "schemas": {
+                "Base": {"properties": {"id": {"type": "integer"}}},
+                "User": {"allOf": [_ref("Base"), {"properties": {"login": s}}]},
+                "Node": {"properties": {"name": s, "parent": _ref("Node")}},
+                "Item": {
+                    "properties": {
+                        "owner": {"anyOf": [_ref("User"), {"type": "null"}]},
+                        "who": {"oneOf": [_ref("Base"), {"properties": {"nick": s}}]},
+                        "ext": {"$ref": "https://example.invalid/x.json#/User"},
+                    }
+                },
+            }
+        }
+    }
+    assert path_exists(spec, "User", "id") and path_exists(spec, "User", "login")
+    assert path_exists(spec, "Item", "owner.login") and path_exists(spec, "Item", "owner.id")
+    assert path_exists(spec, "Item", "who.id") and path_exists(spec, "Item", "who.nick")
+    assert path_exists(spec, "Node", ".".join(["parent"] * 30 + ["name"]))
+    assert not path_exists(spec, "Node", ".".join(["parent"] * 60 + ["name"]))  # depth guard
+    assert not path_exists(spec, "Node", "parent.missing")
+    assert not path_exists(spec, "Item", "owner.nope")
+    assert not path_exists(spec, "Item", "ext.login")  # only local schema refs are followed
+    assert not path_exists(spec, "Nope", "id")
+    loop = {"components": {"schemas": {"L": _ref("M"), "M": _ref("L")}}}
+    assert not path_exists(loop, "L", "x")  # pure ref cycle terminates
+    swagger = {"definitions": {"P": {"properties": {"q": _ref("Q")}}, "Q": {"properties": {}}}}
+    swagger["definitions"]["P"]["properties"]["q"] = {"$ref": "#/definitions/Q"}
+    swagger["definitions"]["Q"]["properties"]["r"] = s
+    assert path_exists(swagger, "P", "q.r")

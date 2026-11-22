@@ -12,7 +12,7 @@ from pathlib import Path
 from evals.real_api.cases import Case, ExpectedMap, FieldType
 from evals.real_api.miner.diff import SchemaDiff, diff_schema
 from evals.real_api.miner.sources import Source
-from evals.real_api.miner.specs import fetch_spec, flatten_schemas
+from evals.real_api.miner.specs import fetch_spec, flatten_schemas, path_exists
 
 SIMILARITY = 0.6  # normalized edit ratio on leaf names
 CONTEXT_FIELDS = 8  # unchanged fields carried along for realism
@@ -123,6 +123,19 @@ def _plan(old: dict[str, FieldType], new: dict[str, FieldType], d: SchemaDiff) -
     return plans
 
 
+def _verified(d: SchemaDiff, schema: str, old_spec: dict, new_spec: dict) -> SchemaDiff:
+    """Drop removals/additions that are artifacts of the flattening hop cap.
+
+    flatten_schemas stops at one $ref hop, so a field that moves behind a second hop looks
+    removed (or, the other way round, added). Check each against the fully resolved spec.
+    """
+    return SchemaDiff(
+        removed={p: t for p, t in d.removed.items() if not path_exists(new_spec, schema, p)},
+        added={p: t for p, t in d.added.items() if not path_exists(old_spec, schema, p)},
+        retyped=d.retyped,
+    )
+
+
 def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "-", name)
 
@@ -229,15 +242,16 @@ def mine(source: Source, repo_dir: Path) -> list[Case]:
     found: list[tuple[Case, dict]] = []
     for old_ref, new_ref in source.pairs:
         try:
-            old_flat = flatten_schemas(fetch_spec(repo_dir, old_ref, source.spec_path))
-            new_flat = flatten_schemas(fetch_spec(repo_dir, new_ref, source.spec_path))
+            old_spec = fetch_spec(repo_dir, old_ref, source.spec_path)
+            new_spec = fetch_spec(repo_dir, new_ref, source.spec_path)
         except (subprocess.CalledProcessError, ValueError) as e:  # e.g. file absent at a ref
             reason = (getattr(e, "stderr", None) or b"").decode(errors="replace").strip() or str(e)
             print(f"skipped pair {old_ref}..{new_ref} ({source.api} {source.spec_path}): {reason}")
             continue
+        old_flat, new_flat = flatten_schemas(old_spec), flatten_schemas(new_spec)
         for schema in sorted(old_flat.keys() & new_flat.keys()):
             old, new = old_flat[schema], new_flat[schema]
-            d = diff_schema(old, new)
+            d = _verified(diff_schema(old, new), schema, old_spec, new_spec)
             if not d.removed or not (d.added or d.retyped):
                 continue
             unchanged = [p for p in sorted(old) if p in new and old[p] == new[p]]
