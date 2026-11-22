@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2
+## 0.1.2 (2026-11-22)
 
 - Rule matcher no longer auto-applies a same-name move when the field's parent object
   changed (found by the real-API eval); those now go to the agent and the review threshold.
