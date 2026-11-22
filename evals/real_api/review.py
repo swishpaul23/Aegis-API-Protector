@@ -1,6 +1,8 @@
 """Human review round-trip: render REVIEW.md for drafted cases, apply ticks and fixes back.
 
-Row columns: id | api | kind | change | ambiguous | source | notes | [ ] confirm | [ ] fix | fix.
+Row columns: id | api | kind | change | ambiguous | context | source | notes | [ ] confirm |
+[ ] fix | fix. ``context`` shows the schema, the removed and added fields with their types,
+and any retyped fields, so a label can be checked without opening the spec.
 Tick a box by changing ``[ ]`` to ``[x]``. The fix column (last) accepts ``REFUSE`` or maps
 ``target<-source`` / ``target<-source:convert`` separated by ``;``.
 """
@@ -15,10 +17,12 @@ from pydantic import ValidationError
 from evals.real_api.cases import Case, ExpectedMap, load_cases, save_case
 from evals.real_api.payloads import build_model, make_new_payload, make_old_records
 
-HEADER = (
-    "| id | api | kind | change | ambiguous | source | notes | confirm | fix? | fix |\n"
-    "|---|---|---|---|---|---|---|---|---|---|"
+COLUMNS = (
+    "id", "api", "kind", "change", "ambiguous", "context", "source", "notes", "confirm", "fix?",
+    "fix",
 )
+N_CELLS = len(COLUMNS)
+HEADER = "| " + " | ".join(COLUMNS) + " |\n" + "|---" * N_CELLS + "|"
 _INTRO = (
     "# Case review\n\n"
     "Tick `[x] confirm` to accept a row as shown. Tick `[x] fix` only if you will fill the last\n"
@@ -46,6 +50,21 @@ def _change(case: Case) -> str:
     return "; ".join(parts)
 
 
+def _context(case: Case) -> str:
+    old, new = case.old_fields, case.new_fields
+    removed = ", ".join(f"{p}:{t}" for p, t in sorted(old.items()) if p not in new)
+    added = ", ".join(f"{p}:{t}" for p, t in sorted(new.items()) if p not in old)
+    retyped = ", ".join(
+        f"{p}:{t}->{new[p]}" for p, t in sorted(old.items()) if p in new and new[p] != t
+    )
+    parts = [f"schema: {case.source.get('schema', '?')}"]
+    parts.append(f"removed: {removed or '(none)'}")
+    parts.append(f"added: {added or '(none)'}")
+    if retyped:
+        parts.append(f"retyped: {retyped}")
+    return "; ".join(parts)
+
+
 def _source(case: Case) -> str:
     s = case.source
     refs = f"{s.get('old_ref', '')}..{s.get('new_ref', '')}"
@@ -64,6 +83,7 @@ def render_review(cases_dir: Path, out: Path) -> None:
             c.kind,
             _change(c),
             "AMBIGUOUS" if c.ambiguous else "",
+            _context(c),
             _source(c),
             c.notes if c.ambiguous else "",
         ]
@@ -88,13 +108,13 @@ def _parse_rows(
         if cells and (cells[0] == "id" or set(cells[0]) <= {"-", ":"}):
             continue  # header or separator
         m = re.fullmatch(r"`(.+)`", cells[0]) if cells else None
-        if len(cells) != 10 or not line.endswith("|") or not m or m.group(1) in rows:
+        if len(cells) != N_CELLS or not line.endswith("|") or not m or m.group(1) in rows:
             malformed.append(line)
             continue
         rows[m.group(1)] = (
-            bool(_TICK.match(cells[7])),
-            bool(_TICK.match(cells[8])),
-            cells[9].replace("\\|", "|"),
+            bool(_TICK.match(cells[N_CELLS - 3])),
+            bool(_TICK.match(cells[N_CELLS - 2])),
+            cells[N_CELLS - 1].replace("\\|", "|"),
         )
     return rows, malformed
 

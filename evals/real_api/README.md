@@ -27,6 +27,15 @@ Headline = repaired / N, where N = confirmed test cases whose outcome is not not
 reported beside the wrongly-applied count and rate. Rules-only and
 rules+agent are reported side by side so the agent's lift is visible.
 
+## Cases and payloads
+
+Each mined case carries the fields it is about, up to 8 unchanged context fields, and **every
+field the same change added to that schema** (`new_fields`). The new payload gives each added
+field that no map uses a fresh seeded value, distinct from every real value in the record.
+These are distractors: a fix that maps an old field to the wrong added field loads a visibly
+wrong value and scores wrong_applied, so the safety metric is not trivially zero. An
+unmappable case therefore also lists the schema's added fields as candidates.
+
 ## Dev/test rule
 
 Cases split ~30% dev / 70% test by a stable hash of the case id (`split_of`).
@@ -37,13 +46,17 @@ Cases split ~30% dev / 70% test by a stable hash of the case id (`split_of`).
 
 ## Review (REVIEW.md)
 
-1. `python -m evals.real_api review render` writes `REVIEW.md`, one row per drafted case.
+1. `python -m evals.real_api review render` writes `REVIEW.md`, one row per drafted case. The
+   `context` cell shows the schema name, the removed and added fields with their types, and
+   any retyped fields.
 2. Tick `[x] confirm` to accept a row as shown. Tick `[x] fix` only if you will fill the last
    column. A filled fix column confirms the case by itself.
 3. Fix column syntax: `REFUSE`, or maps `target<-source[:convert]` separated by `;`, e.g.
    `user_id<-account.user_id:int_str; full_name<-fullName`. `convert` is one of `none`,
-   `int_str`, `int_float`, `epoch_iso`. `target` is a path in the old model, `source` a path in
-   the new payload.
+   `int_str`, `int_float`, `epoch_iso`. `target` is a path in the old model, `source` any path
+   in the case's `new_fields` (which includes every field added to the schema). A fix on an
+   `unmappable` row turns it into a semantic-rename repair (`kind` becomes `rename`, or
+   `retype` if a convert is given); `REFUSE` keeps it `unmappable`.
 4. Ambiguous rows cannot be confirmed as-is; they need a written fix (or `REFUSE`).
    A repair label (confirmed or fixed) is only accepted if it is achievable and runnable:
    every old field missing from the new schema must be a map target (else

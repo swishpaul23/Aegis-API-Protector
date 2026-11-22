@@ -179,3 +179,45 @@ def test_all_mined_cases_are_drafted(cases: list[Case]):
 def test_sources_have_repo_and_spec_path():
     assert {s.api for s in SOURCES} >= {"github", "stripe"}
     assert all(s.repo_url.startswith("https://github.com/") and s.spec_path for s in SOURCES)
+
+
+WIDGET_ADDED = {"fullname", "author.login"}
+
+
+def test_every_case_carries_all_same_schema_added_fields(cases: list[Case]):
+    widget = _by_schema(cases, "Widget")
+    assert len(widget) == 5
+    for c in widget:
+        assert WIDGET_ADDED <= set(c.new_fields), (c.kind, c.new_fields)
+    un = next(c for c in widget if c.kind == "unmappable")
+    assert set(un.new_fields) - set(un.old_fields) == WIDGET_ADDED
+
+
+def test_mined_ambiguous_case_after_fix_runs_through_runner(cases: list[Case], tmp_path: Path):
+    from evals.real_api import runner
+    from evals.real_api.review import _apply_fix
+
+    (contact,) = _by_schema(cases, "Contact")
+    fixed = _apply_fix(contact, "phone_a<-phone_c; phone_b<-phone_d")
+    new = make_new_payload(fixed, make_old_records(fixed))
+    assert all({"phone_c", "phone_d"} <= set(n) for n in new)
+    outcome, _, err = runner.run_case(fixed, None, tmp_path)
+    assert err is None and outcome == "safe_deferral"  # rules alone cannot pick a/b
+
+
+def test_mined_unmappable_case_runs_through_runner(cases: list[Case], tmp_path: Path):
+    from evals.real_api import runner
+
+    un = next(c for c in _by_schema(cases, "Widget") if c.kind == "unmappable")
+    new = make_new_payload(un, make_old_records(un))
+    assert all(WIDGET_ADDED <= _flat_keys(n) and "legacy_flag" not in n for n in new)
+    outcome, _, err = runner.run_case(un, None, tmp_path)
+    assert err is None and outcome == "correct_refusal"
+
+
+def _flat_keys(rec: dict, prefix: str = "") -> set[str]:
+    out: set[str] = set()
+    for k, v in rec.items():
+        p = f"{prefix}{k}"
+        out |= _flat_keys(v, p + ".") if isinstance(v, dict) else {p}
+    return out

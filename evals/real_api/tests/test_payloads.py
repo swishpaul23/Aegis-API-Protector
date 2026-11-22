@@ -154,3 +154,33 @@ def test_make_new_payload_rejects_bad_maps(new, maps, match):
     case = _case({"a": "string", "b": "string"}, new, maps)
     with pytest.raises(ValueError, match=match):
         make_new_payload(case, make_old_records(case))
+
+
+def test_new_only_fields_get_fresh_distinct_distractor_values():
+    case = _case(
+        {"user_name": "string", "id": "integer"},
+        {"userName": "string", "id": "integer", "nick": "string", "rank": "integer"},
+        [ExpectedMap(target="user_name", source="userName")],
+    )
+    old = make_old_records(case)
+    new = make_new_payload(case, old)
+    for o, n in zip(old, new, strict=True):
+        assert set(n) == {"userName", "id", "nick", "rank"}
+        vals = [n["userName"], n["id"], n["nick"], n["rank"]]
+        assert len(set(vals)) == 4  # distractors never equal a real value
+        assert n["nick"] not in o.values() and n["rank"] not in o.values()
+        assert isinstance(n["nick"], str) and isinstance(n["rank"], int)
+    assert new == make_new_payload(case, old)  # deterministic
+    assert len({n["nick"] for n in new}) == len(new)
+
+
+def test_refuse_case_gets_distractor_for_added_field():
+    case = _case(
+        {"id": "integer", "legacy": "boolean"},
+        {"id": "integer", "is_active": "boolean"},
+        [],
+        expected="refuse",
+        kind="unmappable",
+    )
+    new = make_new_payload(case, make_old_records(case))
+    assert all(set(n) == {"id", "is_active"} for n in new)

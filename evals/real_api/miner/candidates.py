@@ -144,6 +144,7 @@ def mine(source: Source, repo_dir: Path) -> list[Case]:
                 continue
             unchanged = [p for p in sorted(old) if p in new and old[p] == new[p]]
             context = unchanged[:CONTEXT_FIELDS]
+            added = sorted(d.added)
             for plan in _plan(old, new, d):
                 refuse = plan["kind"] == "unmappable"
                 cases.append(
@@ -159,7 +160,9 @@ def mine(source: Source, repo_dir: Path) -> list[Case]:
                         },
                         kind=plan["kind"],
                         old_fields={p: old[p] for p in context + plan["old"]},
-                        new_fields={p: new[p] for p in context + plan["new"]},
+                        # every field this change added to the schema rides along, so a
+                        # reviewer can map to it and the payload carries distractors
+                        new_fields={p: new[p] for p in context + plan["new"] + added},
                         expected="refuse" if refuse else "repair",
                         maps=[
                             ExpectedMap(target=t, source=s, convert=c) for t, s, c in plan["maps"]

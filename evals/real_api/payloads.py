@@ -87,6 +87,25 @@ def _value(ftype: str, rng: random.Random, path: str, attempt: int) -> Any:
     raise ValueError(f"unknown field type {ftype!r}")
 
 
+def _fresh(ftype: str, salt: str, path: str, used: set) -> Any:
+    """A seeded value for `path`, distinct from `used` (booleans cannot be distinct)."""
+    rng = random.Random(salt)
+    attempt = 0
+    val = _value(ftype, rng, path, attempt)
+    while ftype != "boolean" and val in used:
+        attempt += 1
+        val = _value(ftype, rng, path, attempt)
+    if ftype != "boolean":
+        used.add(val)
+    return val
+
+
+def _leaves(rec: Any) -> list[Any]:
+    if isinstance(rec, dict):
+        return [v for x in rec.values() for v in _leaves(x)]
+    return [rec]
+
+
 def make_old_records(case: Case, n: int = 5, seed: int = 0) -> list[dict]:
     """Nested dicts valid for the old model, deterministic and distinct per field."""
     records = []
@@ -94,16 +113,7 @@ def make_old_records(case: Case, n: int = 5, seed: int = 0) -> list[dict]:
         rec: dict = {}
         used: set = set()
         for path, ftype in case.old_fields.items():
-            rng = random.Random(f"{seed}:{i}:{path}")
-            attempt = 0
-            val = _value(ftype, rng, path, attempt)
-            # booleans cannot be distinct; skip the distinctness check for them
-            while ftype != "boolean" and val in used:
-                attempt += 1
-                val = _value(ftype, rng, path, attempt)
-            if ftype != "boolean":
-                used.add(val)
-            _set(rec, path, val)
+            _set(rec, path, _fresh(ftype, f"{seed}:{i}:{path}", path, used))
         records.append(rec)
     return records
 
@@ -118,8 +128,13 @@ def _convert(value: Any, kind: str, old_type: str) -> Any:
     raise ValueError(f"convert {kind!r} not valid for old type {old_type!r}")
 
 
-def make_new_payload(case: Case, old_records: list[dict]) -> list[dict]:
-    """Reshape each old record per case.maps; unmapped shared fields carry over."""
+def make_new_payload(case: Case, old_records: list[dict], seed: int = 0) -> list[dict]:
+    """Reshape each old record per case.maps; unmapped shared fields carry over.
+
+    Every other `new_fields` path (a field added by the change that no map uses) gets a fresh
+    seeded value distinct from every real value in the record, so a fix that maps an old field
+    to such a distractor loads a visibly wrong value.
+    """
     targets = {m.target for m in case.maps}
     sources = [m.source for m in case.maps]
     if len(set(sources)) != len(sources):
@@ -129,7 +144,7 @@ def make_new_payload(case: Case, old_records: list[dict]) -> list[dict]:
             raise ValueError(f"map source {src!r} not in new_fields")
     _tree(case.new_fields)  # raises on prefix conflicts (a path that is also a parent)
     out = []
-    for old in old_records:
+    for i, old in enumerate(old_records):
         new: dict = {}
         for m in case.maps:
             if m.target not in case.old_fields:
@@ -139,5 +154,9 @@ def make_new_payload(case: Case, old_records: list[dict]) -> list[dict]:
         for path in case.new_fields:
             if path not in targets and _has(old, path) and not _has(new, path):
                 _set(new, path, _get(old, path))
+        used = {v for v in _leaves(old) + _leaves(new) if not isinstance(v, bool)}
+        for path, ftype in case.new_fields.items():
+            if not _has(new, path):
+                _set(new, path, _fresh(ftype, f"{seed}:{i}:new:{path}", path, used))
         out.append(new)
     return out

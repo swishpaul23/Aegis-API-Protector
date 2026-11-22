@@ -300,3 +300,80 @@ def test_confirm_of_unrunnable_draft_is_error(tmp_path):
     res = apply_review(d, rv)
     assert res["errors"] == ["one: unmapped removed field: c"]
     assert _by_id(d)["one"].label_status == "drafted"
+
+
+def test_render_shows_schema_and_removed_added_fields_with_types(tmp_path):
+    src = {**_SRC, "schema": "Widget"}
+    case = _case(
+        "ctx",
+        source=src,
+        old_fields={"a": "string", "c": "integer", "id": "integer", "n": "integer"},
+        new_fields={"b": "string", "d": "string", "id": "integer", "n": "string"},
+    )
+    d, rv = _setup(tmp_path, case)
+    render_review(d, rv)
+    row = next(ln for ln in rv.read_text(encoding="utf-8").splitlines() if "`ctx`" in ln)
+    assert "schema: Widget" in row
+    assert "removed: a:string, c:integer" in row
+    assert "added: b:string, d:string" in row
+    assert "retyped: n:integer->string" in row
+    assert "id:integer" not in row  # unchanged fields are not listed
+
+
+def test_unmappable_case_fixed_to_semantic_rename(tmp_path):
+    un = _case(
+        "un",
+        kind="unmappable",
+        expected="refuse",
+        maps=[],
+        old_fields={"id": "integer", "legacy": "boolean"},
+        new_fields={"id": "integer", "is_active": "boolean"},
+    )
+    d, rv = _setup(tmp_path, un)
+    render_review(d, rv)
+    assert "added: is_active:boolean" in rv.read_text(encoding="utf-8")
+    _edit(rv, "un", fix="legacy<-is_active")
+    res = apply_review(d, rv)
+    c = _by_id(d)["un"]
+    assert res["confirmed"] == ["un"]
+    assert (c.kind, c.expected, c.label_status) == ("rename", "repair", "confirmed")
+
+
+def test_unmappable_case_fixed_with_convert_is_retype(tmp_path):
+    un = _case(
+        "un",
+        kind="unmappable",
+        expected="refuse",
+        maps=[],
+        old_fields={"seats": "integer"},
+        new_fields={"quantity": "string"},
+    )
+    d, rv = _setup(tmp_path, un)
+    render_review(d, rv)
+    _edit(rv, "un", fix="seats<-quantity:int_str")
+    apply_review(d, rv)
+    assert _by_id(d)["un"].kind == "retype"
+
+
+def test_unmappable_refuse_keeps_kind(tmp_path):
+    un = _case("un", kind="unmappable", expected="refuse", maps=[])
+    d, rv = _setup(tmp_path, un)
+    render_review(d, rv)
+    _edit(rv, "un", fix="REFUSE")
+    apply_review(d, rv)
+    assert _by_id(d)["un"].kind == "unmappable"
+
+
+def test_rendered_rows_have_n_cells_and_old_10_cell_rows_are_malformed(tmp_path):
+    from evals.real_api.review import _SPLIT, N_CELLS
+
+    d, rv = _setup(tmp_path, _ambiguous("amb"), _case("one"))
+    render_review(d, rv)
+    lines = [ln for ln in rv.read_text(encoding="utf-8").splitlines() if ln.startswith("|")]
+    assert N_CELLS == 11
+    assert all(len(_SPLIT.split(ln)[1:-1]) == N_CELLS for ln in lines)
+    # a row in the previous 10-column layout is reported, not misread
+    old_row = "| `one` | api | rename | x | | src | | [x] confirm | [ ] fix |  |"
+    _rewrite(rv, "one", lambda ln: old_row)
+    res = apply_review(d, rv)
+    assert res["errors"] == ["one: malformed row"]
