@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -227,8 +228,13 @@ def mine(source: Source, repo_dir: Path) -> list[Case]:
     """Draft cases for every configured ref pair, one per distinct upstream change."""
     found: list[tuple[Case, dict]] = []
     for old_ref, new_ref in source.pairs:
-        old_flat = flatten_schemas(fetch_spec(repo_dir, old_ref, source.spec_path))
-        new_flat = flatten_schemas(fetch_spec(repo_dir, new_ref, source.spec_path))
+        try:
+            old_flat = flatten_schemas(fetch_spec(repo_dir, old_ref, source.spec_path))
+            new_flat = flatten_schemas(fetch_spec(repo_dir, new_ref, source.spec_path))
+        except (subprocess.CalledProcessError, ValueError) as e:  # e.g. file absent at a ref
+            reason = (getattr(e, "stderr", None) or b"").decode(errors="replace").strip() or str(e)
+            print(f"skipped pair {old_ref}..{new_ref} ({source.api} {source.spec_path}): {reason}")
+            continue
         for schema in sorted(old_flat.keys() & new_flat.keys()):
             old, new = old_flat[schema], new_flat[schema]
             d = diff_schema(old, new)

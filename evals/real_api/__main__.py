@@ -55,8 +55,9 @@ def _cmd_mine(args: argparse.Namespace) -> int:
             found = mine(src, clones[src.repo_url])
             written = skipped = 0
             for case in found:
-                if (cases_dir / f"{case.id}.json").exists():
-                    skipped += 1  # never clobber confirmed labels
+                name = f"{case.id}.json"
+                if (cases_dir / name).exists() or (cases_dir / "pool" / name).exists():
+                    skipped += 1  # never clobber confirmed labels or resurrect pooled cases
                     continue
                 save_case(case, cases_dir)
                 written += 1
@@ -88,8 +89,18 @@ def _cmd_select(args: argparse.Namespace) -> int:
                 st[c.expected] += 1
                 continue
             pool = cases_dir / "pool"
-            pool.mkdir(exist_ok=True)
-            (cases_dir / f"{c.id}.json").replace(pool / f"{c.id}.json")
+            src_file, dst = cases_dir / f"{c.id}.json", pool / f"{c.id}.json"
+            if dst.exists():  # never overwrite a pooled file
+                if dst.read_bytes() != src_file.read_bytes():
+                    print(
+                        f"WARNING: {c.id}: pool/ already has a different file; left both",
+                        file=sys.stderr,
+                    )
+                    continue
+                src_file.unlink()  # identical copy already pooled
+            else:
+                pool.mkdir(exist_ok=True)
+                src_file.replace(dst)
             st["pooled"] += 1
     total = sum(s["repair"] + s["refuse"] for s in stats.values())
     for api, st in stats.items():

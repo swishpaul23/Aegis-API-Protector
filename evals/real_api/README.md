@@ -114,7 +114,9 @@ refuse and pooled per api, each api's share of the kept total, and warns (exit c
 if one api exceeds 40%.
 
 `mine` skips sources with no version pairs configured and skips any case id that already has
-a file, so confirmed labels survive re-mining. `run` fails with exit code 2 before doing any
+a file at the top level or in `pool/`, so confirmed labels survive re-mining and pooled cases are
+not resurrected. A ref pair whose spec cannot be read (e.g. the file is absent at a ref) is
+reported as `skipped pair` and mining continues. `run` fails with exit code 2 before doing any
 work if agent mode is requested without `ANTHROPIC_API_KEY`, or if the live preflight (one
 tiny call to the eval's model, `AEGIS_MODEL` or the default) fails; no run directory is
 created then. If more than 3 cases end in agent_error, the agent pass aborts with exit code 2:

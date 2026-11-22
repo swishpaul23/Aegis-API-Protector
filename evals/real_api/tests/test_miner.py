@@ -273,3 +273,14 @@ def test_sources_have_pairs_and_safe_refs():
             assert ref and not ref.startswith("-"), f"{s.api}: unsafe ref {ref!r}"
         assert not s.api.startswith("-") and not s.spec_path.startswith("-")
     assert len([s for s in SOURCES if s.api == "twilio"]) > 1
+
+
+def test_mine_skips_a_pair_whose_spec_is_missing_at_a_ref(repo: Path, capsys):
+    _git(repo, "rm", "-q", SPEC_PATH)
+    _git(repo, "commit", "-qm", "gone")
+    _git(repo, "tag", "gone")
+    src = Source("fx", "u", SPEC_PATH, [("new", "gone"), ("old", "new")])
+    found = mine(src, repo)
+    assert found  # the good pair still yields cases
+    out = capsys.readouterr().out
+    assert f"skipped pair new..gone (fx {SPEC_PATH})" in out

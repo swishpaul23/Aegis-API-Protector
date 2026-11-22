@@ -453,3 +453,49 @@ def test_pool_is_excluded_from_load_cases_and_review_render(tmp_path):
     text = review.read_text(encoding="utf-8")
     assert all(f"`{i}`" not in text for i in pooled)
     assert all(f"`{c.id}`" in text for c in load_cases(d) if c.label_status == "drafted")
+
+
+def test_mine_after_select_does_not_resurrect_pooled_cases(tmp_path, monkeypatch, capsys):
+    d = tmp_path / "cases"
+    ids = [f"mm-{i}" for i in range(4)]
+    found = [_mk(i, "mm") for i in ids]
+    monkeypatch.setattr(cli, "SOURCES", [Source("mm", "u", "p", [("a", "b")])])
+    monkeypatch.setattr(cli, "clone_repo", lambda url, dd: None)
+    monkeypatch.setattr(cli, "mine", lambda s, dd: found)
+    assert cli.main(["mine", "--cases", str(d)]) == 0
+    assert cli.main(["select", "--cases", str(d), "--repair-per-api", "2"]) == 0
+    top, pooled = _top(d), _pooled(d)
+    assert len(top) == 2 and len(pooled) == 2
+    capsys.readouterr()
+    assert cli.main(["mine", "--cases", str(d)]) == 0
+    assert (_top(d), _pooled(d)) == (top, pooled)
+    assert "written 0, skipped-existing 4" in capsys.readouterr().out
+
+
+def _pool_collision(tmp_path, pooled_bytes):
+    d = tmp_path / "cases"
+    for i in range(3):
+        save_case(_mk(f"pc-{i}", "pc"), d)
+    loser = sorted(("pc-0", "pc-1", "pc-2"), key=_hash_key)[-1]
+    (d / "pool").mkdir()
+    top = d / f"{loser}.json"
+    (d / "pool" / f"{loser}.json").write_bytes(
+        top.read_bytes() if pooled_bytes is None else pooled_bytes
+    )
+    return d, loser
+
+
+def test_select_pool_collision_identical_bytes_unlinks_top_copy(tmp_path):
+    d, loser = _pool_collision(tmp_path, None)
+    assert cli.main(["select", "--cases", str(d), "--repair-per-api", "2"]) == 0
+    assert not (d / f"{loser}.json").exists()
+    assert (d / "pool" / f"{loser}.json").exists()
+
+
+def test_select_pool_collision_different_bytes_keeps_both_and_warns(tmp_path, capsys):
+    d, loser = _pool_collision(tmp_path, b'{"different": true}\n')
+    assert cli.main(["select", "--cases", str(d), "--repair-per-api", "2"]) == 0
+    assert (d / f"{loser}.json").exists()
+    assert (d / "pool" / f"{loser}.json").read_bytes() == b'{"different": true}\n'
+    cap = capsys.readouterr()
+    assert "WARNING" in cap.err and loser in cap.err
