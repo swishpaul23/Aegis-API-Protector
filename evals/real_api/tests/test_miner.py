@@ -221,3 +221,45 @@ def _flat_keys(rec: dict, prefix: str = "") -> set[str]:
         p = f"{prefix}{k}"
         out |= _flat_keys(v, p + ".") if isinstance(v, dict) else {p}
     return out
+
+
+def _two_ref_repo(tmp_path: Path, old: dict, new: dict) -> Path:
+    r = tmp_path / "r"
+    r.mkdir()
+    _git(r, "init", "-q")
+    (r / SPEC_PATH).write_text(json.dumps({"components": {"schemas": old}}))
+    _git(r, "add", ".")
+    _git(r, "commit", "-q", "-m", "o")
+    _git(r, "tag", "o")
+    (r / SPEC_PATH).write_text(json.dumps({"components": {"schemas": new}}))
+    _git(r, "commit", "-qam", "n")
+    return r
+
+
+def _shared(owner_props: dict) -> dict:
+    ref = {"$ref": "#/components/schemas/Owner"}
+    s = {"type": "string"}
+    return {
+        "Owner": {"properties": {"id": {"type": "integer"}, **owner_props}},
+        "Repo": {"properties": {"name": s, "owner": ref}},
+        "Issue": {"properties": {"title": s, "user": ref}},
+    }
+
+
+def test_shared_component_rename_is_one_case(tmp_path: Path):
+    s = {"type": "string"}
+    r = _two_ref_repo(tmp_path, _shared({"login_name": s}), _shared({"loginName": s}))
+    out = mine(Source("fx", "u", SPEC_PATH, [("o", "HEAD")]), r)
+    assert len(out) == 1, [(c.source["schema"], c.maps) for c in out]
+    (c,) = out
+    assert c.source["schema"] == "Owner"  # the defining component: shortest paths
+    assert [(m.target, m.source) for m in c.maps] == [("login_name", "loginName")]
+
+
+def test_unrelated_changes_in_two_schemas_are_kept(tmp_path: Path):
+    s, i = {"type": "string"}, {"type": "integer"}
+    old = {"A": {"properties": {"full_name": s}}, "B": {"properties": {"user_count": i}}}
+    new = {"A": {"properties": {"fullname": s}}, "B": {"properties": {"userCount": i}}}
+    r = _two_ref_repo(tmp_path, old, new)
+    out = mine(Source("fx", "u", SPEC_PATH, [("o", "HEAD")]), r)
+    assert sorted(c.source["schema"] for c in out) == ["A", "B"]

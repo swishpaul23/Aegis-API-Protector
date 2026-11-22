@@ -36,6 +36,13 @@ These are distractors: a fix that maps an old field to the wrong added field loa
 wrong value and scores wrong_applied, so the safety metric is not trivially zero. An
 unmappable case therefore also lists the schema's added fields as candidates.
 
+**One case per upstream change.** `$ref` expansion makes a rename in a shared component show up
+under every schema that embeds it. `mine` dedupes across all schemas of a ref pair by a change
+signature: (api, old ref, new ref, kind, the removed -> added pairs with types and convert,
+with the longest common path prefix stripped). It keeps the copy with the shortest paths (the
+defining component). This can also merge two genuinely separate but identical changes in one
+pair (e.g. `id` int -> string in two schemas); that errs toward a smaller N, never a larger one.
+
 ## Dev/test rule
 
 Cases split ~30% dev / 70% test by a stable hash of the case id (`split_of`).

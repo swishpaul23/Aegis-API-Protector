@@ -132,8 +132,100 @@ def _case_id(api: str, schema: str, old_ref: str, new_ref: str, plan: dict) -> s
     return f"{api}-{_slug(schema)}-{hashlib.sha256(key.encode()).hexdigest()[:8]}"
 
 
+def _common_prefix(paths: list[str]) -> int:
+    """Number of leading path segments shared by all paths, never including a leaf."""
+    split = [p.split(".") for p in paths]
+    limit = min(len(s) for s in split) - 1
+    n = 0
+    while n < limit and len({s[n] for s in split}) == 1:
+        n += 1
+    return n
+
+
+def _involved(plan: dict) -> list[str]:
+    return list(plan["old"]) + list(plan["new"])
+
+
+def change_signature(case: Case, plan: dict) -> tuple:
+    """Identity of the upstream change, independent of which schema references it.
+
+    A rename inside a shared ``$ref`` component shows up under every schema that embeds it,
+    with the embedding path as a prefix. Stripping the longest common prefix of the involved
+    paths makes those copies equal.
+    """
+    k = _common_prefix(_involved(plan))
+
+    def rel(path: str) -> str:
+        return ".".join(path.split(".")[k:])
+
+    old_t, new_t = case.old_fields, case.new_fields
+    if case.maps:
+        body: tuple = tuple(
+            sorted(
+                (rel(m.target), old_t[m.target], rel(m.source), new_t[m.source], m.convert)
+                for m in case.maps
+            )
+        )
+    else:
+        body = (
+            tuple(sorted((rel(p), old_t[p]) for p in plan["old"])),
+            tuple(sorted((rel(p), new_t[p]) for p in plan["new"])),
+        )
+    s = case.source
+    return (case.api, s["old_ref"], s["new_ref"], case.kind, body)
+
+
+def _dedupe(found: list[tuple[Case, dict]]) -> list[Case]:
+    """Keep one case per change signature: the one with the shortest involved paths."""
+    best: dict[tuple, tuple[tuple, Case]] = {}
+    for case, plan in found:
+        paths = _involved(plan)
+        rank = (sum(p.count(".") for p in paths), sum(map(len, paths)), case.id)
+        sig = change_signature(case, plan)
+        if sig not in best or rank < best[sig][0]:
+            best[sig] = (rank, case)
+    keep = {id(c) for _, c in best.values()}
+    return [c for c, _ in found if id(c) in keep]
+
+
+def _draft(
+    source: Source,
+    schema: str,
+    old_ref: str,
+    new_ref: str,
+    old: dict,
+    new: dict,
+    plan: dict,
+    context: list[str],
+    added: list[str],
+) -> Case:
+    refuse = plan["kind"] == "unmappable"
+    return Case(
+        id=_case_id(source.api, schema, old_ref, new_ref, plan),
+        api=source.api,
+        source={
+            "repo": source.repo_url,
+            "old_ref": old_ref,
+            "new_ref": new_ref,
+            "spec_path": source.spec_path,
+            "schema": schema,
+        },
+        kind=plan["kind"],
+        old_fields={p: old[p] for p in context + plan["old"]},
+        # every field this change added to the schema rides along, so a reviewer can map
+        # to it and the payload carries distractors
+        new_fields={p: new[p] for p in context + plan["new"] + added},
+        expected="refuse" if refuse else "repair",
+        maps=[ExpectedMap(target=t, source=s, convert=c) for t, s, c in plan["maps"]],
+        label_status="drafted",
+        ambiguous=plan["ambiguous"],
+        notes=plan["notes"],
+    )
+
+
 def mine(source: Source, repo_dir: Path) -> list[Case]:
-    cases: list[Case] = []
+    """Draft cases for every configured ref pair, one per distinct upstream change."""
+    found: list[tuple[Case, dict]] = []
     for old_ref, new_ref in source.pairs:
         old_flat = flatten_schemas(fetch_spec(repo_dir, old_ref, source.spec_path))
         new_flat = flatten_schemas(fetch_spec(repo_dir, new_ref, source.spec_path))
@@ -146,30 +238,6 @@ def mine(source: Source, repo_dir: Path) -> list[Case]:
             context = unchanged[:CONTEXT_FIELDS]
             added = sorted(d.added)
             for plan in _plan(old, new, d):
-                refuse = plan["kind"] == "unmappable"
-                cases.append(
-                    Case(
-                        id=_case_id(source.api, schema, old_ref, new_ref, plan),
-                        api=source.api,
-                        source={
-                            "repo": source.repo_url,
-                            "old_ref": old_ref,
-                            "new_ref": new_ref,
-                            "spec_path": source.spec_path,
-                            "schema": schema,
-                        },
-                        kind=plan["kind"],
-                        old_fields={p: old[p] for p in context + plan["old"]},
-                        # every field this change added to the schema rides along, so a
-                        # reviewer can map to it and the payload carries distractors
-                        new_fields={p: new[p] for p in context + plan["new"] + added},
-                        expected="refuse" if refuse else "repair",
-                        maps=[
-                            ExpectedMap(target=t, source=s, convert=c) for t, s, c in plan["maps"]
-                        ],
-                        label_status="drafted",
-                        ambiguous=plan["ambiguous"],
-                        notes=plan["notes"],
-                    )
-                )
-    return cases
+                case = _draft(source, schema, old_ref, new_ref, old, new, plan, context, added)
+                found.append((case, plan))
+    return _dedupe(found)
